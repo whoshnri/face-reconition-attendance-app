@@ -58,12 +58,16 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       ) : null}
 
       <View style={styles.content}>
+        <View style={[styles.iconContainer, { backgroundColor: theme.backgroundSecondary }]}>
+          <Feather name="alert-triangle" size={48} color={theme.primary} />
+        </View>
+        
         <ThemedText type="h1" style={styles.title}>
-          Something went wrong
+          Oops! Something went wrong
         </ThemedText>
 
         <ThemedText type="body" style={styles.message}>
-          Please reload the app to continue.
+          FaceAttend encountered an unexpected issue. Please restart the app to continue managing your attendance.
         </ThemedText>
 
         <Pressable
@@ -77,11 +81,12 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
             },
           ]}
         >
+          <Feather name="refresh-cw" size={20} color={theme.buttonText} />
           <ThemedText
             type="body"
             style={[styles.buttonText, { color: theme.buttonText }]}
           >
-            Try Again
+            Restart FaceAttend
           </ThemedText>
         </Pressable>
       </View>
@@ -159,14 +164,20 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 600,
   },
+  iconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.md,
+  },
   title: {
     textAlign: "center",
-    lineHeight: 40,
   },
   message: {
     textAlign: "center",
     opacity: 0.7,
-    lineHeight: 24,
   },
   topButton: {
     position: "absolute",
@@ -181,10 +192,14 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   button: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
     paddingVertical: Spacing.lg,
     borderRadius: BorderRadius.md,
     paddingHorizontal: Spacing["2xl"],
     minWidth: 200,
+    justifyContent: "center",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,

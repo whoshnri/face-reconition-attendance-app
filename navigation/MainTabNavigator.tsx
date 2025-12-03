@@ -3,13 +3,15 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Platform, StyleSheet } from "react-native";
-import HomeStackNavigator from "@/navigation/HomeStackNavigator";
-import ProfileStackNavigator from "@/navigation/ProfileStackNavigator";
+import StudentsStackNavigator from "@/navigation/StudentsStackNavigator";
+import AttendanceStackNavigator from "@/navigation/AttendanceStackNavigator";
+import ReportsStackNavigator from "@/navigation/ReportsStackNavigator";
 import { useTheme } from "@/hooks/useTheme";
 
 export type MainTabParamList = {
-  HomeTab: undefined;
-  ProfileTab: undefined;
+  StudentsTab: undefined;
+  AttendanceTab: undefined;
+  ReportsTab: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -19,7 +21,7 @@ export default function MainTabNavigator() {
 
   return (
     <Tab.Navigator
-      initialRouteName="HomeTab"
+      initialRouteName="AttendanceTab"
       screenOptions={{
         tabBarActiveTintColor: theme.tabIconSelected,
         tabBarInactiveTintColor: theme.tabIconDefault,
@@ -44,22 +46,32 @@ export default function MainTabNavigator() {
       }}
     >
       <Tab.Screen
-        name="HomeTab"
-        component={HomeStackNavigator}
+        name="StudentsTab"
+        component={StudentsStackNavigator}
         options={{
-          title: "Home",
+          title: "Students",
           tabBarIcon: ({ color, size }) => (
-            <Feather name="home" size={size} color={color} />
+            <Feather name="users" size={size} color={color} />
           ),
         }}
       />
       <Tab.Screen
-        name="ProfileTab"
-        component={ProfileStackNavigator}
+        name="AttendanceTab"
+        component={AttendanceStackNavigator}
         options={{
-          title: "Profile",
+          title: "Attendance",
           tabBarIcon: ({ color, size }) => (
-            <Feather name="user" size={size} color={color} />
+            <Feather name="check-circle" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="ReportsTab"
+        component={ReportsStackNavigator}
+        options={{
+          title: "Reports",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="bar-chart-2" size={size} color={color} />
           ),
         }}
       />

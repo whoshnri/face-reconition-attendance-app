@@ -28,9 +28,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   icon: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     marginRight: Spacing.sm,
+    borderRadius: 8,
   },
   title: {
     fontSize: 17,
