@@ -88,11 +88,11 @@ export default function AttendanceHomeScreen() {
     transform: [{ scale: fabScale.value }],
   }));
 
-  const handleStartSession = () => {
+  const handleStartSession = async () => {
     if (enrolledCount === 0) {
       return;
     }
-    const sessionId = startSession();
+    const sessionId = await startSession();
     navigation.navigate("AttendanceScanner", { sessionId });
   };
 

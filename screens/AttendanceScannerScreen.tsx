@@ -68,7 +68,7 @@ export default function AttendanceScannerScreen() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const simulateRecognition = () => {
+  const simulateRecognition = async () => {
     if (isScanning || enrolledStudents.length === 0) return;
     
     setIsScanning(true);
@@ -77,9 +77,9 @@ export default function AttendanceScannerScreen() {
       withTiming(1, { duration: 200 })
     );
 
-    setTimeout(() => {
+    setTimeout(async () => {
       const randomStudent = enrolledStudents[Math.floor(Math.random() * enrolledStudents.length)];
-      const wasMarked = markAttendance(randomStudent.id);
+      const wasMarked = await markAttendance(randomStudent.id);
 
       if (wasMarked) {
         setResult({ type: "success", name: randomStudent.name });

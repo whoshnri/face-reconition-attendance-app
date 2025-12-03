@@ -60,7 +60,7 @@ export default function EnrollFaceScreen() {
     setStatusMessage("Hold still...");
     borderColor.value = withTiming(1, { duration: 500 });
 
-    setTimeout(() => {
+    setTimeout(async () => {
       setStatus("success");
       setStatusMessage("Face enrolled successfully!");
       successScale.value = withSpring(1, { damping: 12, stiffness: 100 });
@@ -69,7 +69,7 @@ export default function EnrollFaceScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      enrollFace(student.id);
+      await enrollFace(student.id);
 
       setTimeout(() => {
         navigation.goBack();

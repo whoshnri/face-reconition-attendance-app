@@ -129,8 +129,8 @@ export default function StudentDetailScreen() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => {
-            deleteStudent(student.id);
+          onPress: async () => {
+            await deleteStudent(student.id);
             navigation.goBack();
           },
         },

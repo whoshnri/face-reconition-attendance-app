@@ -53,13 +53,13 @@ export default function AddEditStudentScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validateForm()) return;
 
     if (isEditing && existingStudent) {
-      updateStudent(existingStudent.id, name.trim(), studentId.trim());
+      await updateStudent(existingStudent.id, name.trim(), studentId.trim());
     } else {
-      addStudent(name.trim(), studentId.trim());
+      await addStudent(name.trim(), studentId.trim());
     }
     navigation.goBack();
   };
