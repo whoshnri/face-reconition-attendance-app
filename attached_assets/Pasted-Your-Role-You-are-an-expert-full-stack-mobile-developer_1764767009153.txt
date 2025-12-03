@@ -1,0 +1,80 @@
+Your Role: You are an expert full-stack mobile developer with extensive experience in React Native, on-device machine learning, and local database management.
+Project Goal: I need you to generate a detailed project plan, technical architecture, and key code snippets for a Facial Recognition Attendance System. This will be a mobile application built for a single administrator (e.g., a teacher) to manage and take student attendance.
+Core Technology Stack:
+Mobile Framework: React Native
+Database: SQLite (for local, on-device storage)
+Detailed Project Specification
+1. High-Level Overview
+The application is a standalone tool for an administrator. The entire workflow, from student registration to attendance marking, happens locally on the device. There is no server or cloud backend.
+User Flow:
+Enrollment Phase: The administrator adds students to the app. For each student, the admin captures their face using the device's camera. The app processes this image to extract a unique facial embedding (a numerical representation of the face) and stores it in the local SQLite database, linking it to the student's profile.
+Attendance Phase: During a class, the administrator starts an "Attendance Session." The app opens the camera. The admin points the camera at each student one by one. The app detects the face in real-time, computes its embedding, and compares it against all the stored embeddings in the database. Upon finding a match, it automatically marks the student as "present" for that session with a timestamp.
+2. Core Features & User Stories
+User Role: Administrator
+Story 1: Attendee Management
+As an admin, I want to add a new attendee by entering their name and a unique ID.
+As an admin, I want to see a list of all registered attendees.
+As an admin, I want to view/edit the details of an attendee.
+As an admin, I want to delete an attendee from the system.
+Story 2: Facial Enrollment
+As an admin, I want to select an attendee from the list and open a "Register Face" screen.
+As an admin, I want to use the front-facing camera to capture a clear picture of the attendee's face.
+As an admin, I want the app to confirm that a face was successfully detected and its data has been saved.
+Story 3: Attendance Taking
+As an admin, I want to start a new "Attendance Session" for a specific class or date.
+As an admin, I want the app to open a live camera view for scanning.
+As an admin, I want the app to automatically detect a face in the camera feed, identify the person by matching their face with the enrolled data, and display their name on the screen as a confirmation.
+As an admin, I want the app to record the attendance for the identified student immediately, preventing duplicate marks for the same session.
+Story 4: Attendance Reporting
+As an admin, I want to view a list of all past attendance sessions.
+As an admin, I want to select a session and see a list of all students marked "present" along with the timestamp.
+3. Technical Architecture & Implementation Details
+React Native Setup:
+Use React Navigation for screen management (Stack Navigator).
+Use functional components with React Hooks (useState, useEffect).
+Manage global state (if needed, for things like the current session) with React Context API.
+Database (SQLite):
+Recommend a library like react-native-sqlite-storage or expo-sqlite for interacting with the database.
+The database will be created and stored on the user's device.
+Schema: Please define the CREATE TABLE statements for the following tables:
+attendees:
+id (INTEGER, PRIMARY KEY, AUTOINCREMENT)
+name (TEXT, NOT NULL)
+student_id (TEXT, UNIQUE)
+face_embeddings:
+id (INTEGER, PRIMARY KEY, AUTOINCREMENT)
+attendee_id (INTEGER, FOREIGN KEY to attendees.id)
+embedding (TEXT, NOT NULL) - The facial embedding vector will be stored as a JSON string.
+attendance_records:
+id (INTEGER, PRIMARY KEY, AUTOINCREMENT)
+attendee_id (INTEGER, FOREIGN KEY to attendees.id)
+session_id (TEXT, NOT NULL) - e.g., "CLASS101-2025-12-03"
+timestamp (DATETIME, DEFAULT CURRENT_TIMESTAMP)
+Facial Recognition Logic (The Core Challenge):
+This needs to run entirely on-device for performance and privacy.
+Recommendation: Suggest using TensorFlow.js for React Native (tfjs-react-native) with a pre-trained, lightweight facial recognition model like MobileFaceNet.
+Workflow for Enrollment:
+Use react-native-camera or expo-camera to get a video stream.
+Use a face detection model (like BlazeFace) to locate the face in the frame.
+Crop the image to the detected face.
+Feed the cropped face image into the MobileFaceNet model to get a 128 or 512-dimension embedding vector (an array of numbers).
+Convert this array to a JSON string and save it in the face_embeddings table.
+Workflow for Recognition:
+In the live camera view, continuously detect faces.
+For each detected face, compute its embedding using the same model.
+Fetch all embeddings from the face_embeddings table.
+Calculate the distance (e.g., Euclidean distance or Cosine similarity) between the newly computed embedding and all the stored embeddings.
+If the smallest distance is below a certain threshold (e.g., 0.6), consider it a match. The attendee_id associated with that stored embedding is the identified person.
+Your Required Output
+Please provide the following based on the specifications above:
+Recommended Libraries: A list of essential npm or yarn packages needed for this project (e.g., for navigation, camera, database, TensorFlow.js).
+Project Folder Structure: A clear, hierarchical structure for the React Native project (e.g., src/screens, src/components, src/database, src/ml).
+Database Code Snippets: JavaScript code snippets demonstrating how to:
+Initialize the SQLite database and create the tables.
+Insert a new attendee and their face embedding.
+Fetch all face embeddings for the recognition process.
+Facial Recognition Code Snippets: A key JavaScript snippet (ideally a custom React Hook like useFaceRecognition) that shows how to:
+Set up TensorFlow.js and load the MobileFaceNet model.
+Process a camera frame tensor to detect and compute a facial embedding.
+Compare the live embedding with the stored embeddings to find a match.
+Component Outlines: Brief JSX outlines for the main screens: AttendeeListScreen, EnrollFaceScreen, and AttendanceScannerScreen.
