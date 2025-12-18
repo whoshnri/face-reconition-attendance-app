@@ -47,7 +47,10 @@ function FilterButton({
       ]}
     >
       <ThemedText
-        style={[styles.filterText, { color: isActive ? "#FFFFFF" : theme.text }]}
+        style={[
+          styles.filterText,
+          { color: isActive ? "#FFFFFF" : theme.text },
+        ]}
       >
         {label}
       </ThemedText>
@@ -69,9 +72,10 @@ function SessionCard({
     transform: [{ scale: scale.value }],
   }));
 
-  const attendanceRate = session.totalCount > 0
-    ? Math.round((session.presentCount / session.totalCount) * 100)
-    : 0;
+  const attendanceRate =
+    session.totalCount > 0
+      ? Math.round((session.presentCount / session.totalCount) * 100)
+      : 0;
 
   return (
     <AnimatedPressable
@@ -91,7 +95,9 @@ function SessionCard({
       <View style={styles.sessionHeader}>
         <View>
           <ThemedText type="h4">{session.date}</ThemedText>
-          <ThemedText style={[styles.sessionTime, { color: theme.textSecondary }]}>
+          <ThemedText
+            style={[styles.sessionTime, { color: theme.textSecondary }]}
+          >
             {session.time}
           </ThemedText>
         </View>
@@ -99,19 +105,30 @@ function SessionCard({
       </View>
       <View style={styles.sessionStats}>
         <View style={styles.statItem}>
-          <View style={[styles.statDot, { backgroundColor: Colors.light.success }]} />
+          <View
+            style={[styles.statDot, { backgroundColor: Colors.light.success }]}
+          />
           <ThemedText style={styles.statText}>
             {session.presentCount} present
           </ThemedText>
         </View>
         <View style={styles.statItem}>
-          <View style={[styles.statDot, { backgroundColor: theme.textDisabled }]} />
+          <View
+            style={[styles.statDot, { backgroundColor: theme.textDisabled }]}
+          />
           <ThemedText style={styles.statText}>
             {session.totalCount - session.presentCount} absent
           </ThemedText>
         </View>
-        <View style={[styles.rateBadge, { backgroundColor: Colors.light.primary + "15" }]}>
-          <ThemedText style={[styles.rateText, { color: Colors.light.primary }]}>
+        <View
+          style={[
+            styles.rateBadge,
+            { backgroundColor: Colors.light.primary + "15" },
+          ]}
+        >
+          <ThemedText
+            style={[styles.rateText, { color: Colors.light.primary }]}
+          >
             {attendanceRate}%
           </ThemedText>
         </View>
@@ -125,7 +142,12 @@ function EmptyState() {
 
   return (
     <View style={styles.emptyContainer}>
-      <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundSecondary }]}>
+      <View
+        style={[
+          styles.emptyIcon,
+          { backgroundColor: theme.backgroundSecondary },
+        ]}
+      >
         <Feather name="bar-chart-2" size={48} color={theme.textSecondary} />
       </View>
       <ThemedText type="h3" style={styles.emptyTitle}>
@@ -151,9 +173,10 @@ export default function ReportsScreen() {
     sessions.length > 0
       ? Math.round(
           sessions.reduce((acc, s) => {
-            const rate = s.totalCount > 0 ? (s.presentCount / s.totalCount) * 100 : 0;
+            const rate =
+              s.totalCount > 0 ? (s.presentCount / s.totalCount) * 100 : 0;
             return acc + rate;
-          }, 0) / sessions.length
+          }, 0) / sessions.length,
         )
       : 0;
 
@@ -183,19 +206,39 @@ export default function ReportsScreen() {
         </View>
 
         <View style={styles.summaryRow}>
-          <View style={[styles.summaryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <View
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
             <ThemedText type="h2" style={{ color: theme.primary }}>
               {totalSessions}
             </ThemedText>
-            <ThemedText style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.summaryLabel, { color: theme.textSecondary }]}
+            >
               Total Sessions
             </ThemedText>
           </View>
-          <View style={[styles.summaryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <View
+            style={[
+              styles.summaryCard,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
             <ThemedText type="h2" style={{ color: Colors.light.success }}>
               {averageAttendance}%
             </ThemedText>
-            <ThemedText style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.summaryLabel, { color: theme.textSecondary }]}
+            >
               Avg. Attendance
             </ThemedText>
           </View>
@@ -208,7 +251,10 @@ export default function ReportsScreen() {
             data={sessions}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <SessionCard session={item} onPress={() => handleSessionPress(item)} />
+              <SessionCard
+                session={item}
+                onPress={() => handleSessionPress(item)}
+              />
             )}
             contentContainerStyle={[
               styles.listContent,

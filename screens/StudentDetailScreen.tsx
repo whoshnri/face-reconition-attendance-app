@@ -134,7 +134,7 @@ export default function StudentDetailScreen() {
             navigation.goBack();
           },
         },
-      ]
+      ],
     );
   };
 
@@ -144,7 +144,11 @@ export default function StudentDetailScreen() {
         <View
           style={[
             styles.largeAvatar,
-            { backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundSecondary },
+            {
+              backgroundColor: isDark
+                ? Colors.dark.backgroundSecondary
+                : Colors.light.backgroundSecondary,
+            },
           ]}
         >
           <Feather name="user" size={48} color={theme.textSecondary} />
@@ -157,21 +161,43 @@ export default function StudentDetailScreen() {
         </ThemedText>
       </View>
 
-      <View style={[styles.card, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderColor: theme.border,
+          },
+        ]}
+      >
         <ThemedText type="h4" style={styles.cardTitle}>
           Face Enrollment
         </ThemedText>
         {student.faceEnrolled ? (
           <View style={styles.enrolledContainer}>
-            <View style={[styles.enrolledBadge, { backgroundColor: Colors.light.success + "20" }]}>
-              <Feather name="check-circle" size={24} color={Colors.light.success} />
-              <ThemedText style={[styles.enrolledText, { color: Colors.light.success }]}>
+            <View
+              style={[
+                styles.enrolledBadge,
+                { backgroundColor: Colors.light.success + "20" },
+              ]}
+            >
+              <Feather
+                name="check-circle"
+                size={24}
+                color={Colors.light.success}
+              />
+              <ThemedText
+                style={[styles.enrolledText, { color: Colors.light.success }]}
+              >
                 Face Enrolled
               </ThemedText>
             </View>
             {student.enrolledDate ? (
-              <ThemedText style={[styles.enrolledDate, { color: theme.textSecondary }]}>
-                Enrolled on {new Date(student.enrolledDate).toLocaleDateString()}
+              <ThemedText
+                style={[styles.enrolledDate, { color: theme.textSecondary }]}
+              >
+                Enrolled on{" "}
+                {new Date(student.enrolledDate).toLocaleDateString()}
               </ThemedText>
             ) : null}
             <ActionButton
@@ -182,13 +208,26 @@ export default function StudentDetailScreen() {
           </View>
         ) : (
           <View style={styles.notEnrolledContainer}>
-            <View style={[styles.notEnrolledBadge, { backgroundColor: theme.backgroundSecondary }]}>
-              <Feather name="camera-off" size={24} color={theme.textSecondary} />
-              <ThemedText style={[styles.notEnrolledText, { color: theme.textSecondary }]}>
+            <View
+              style={[
+                styles.notEnrolledBadge,
+                { backgroundColor: theme.backgroundSecondary },
+              ]}
+            >
+              <Feather
+                name="camera-off"
+                size={24}
+                color={theme.textSecondary}
+              />
+              <ThemedText
+                style={[styles.notEnrolledText, { color: theme.textSecondary }]}
+              >
                 Face Not Enrolled
               </ThemedText>
             </View>
-            <ThemedText style={[styles.enrollInfo, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.enrollInfo, { color: theme.textSecondary }]}
+            >
               Enroll this student's face to enable automatic attendance marking
             </ThemedText>
             <ActionButton
@@ -201,7 +240,15 @@ export default function StudentDetailScreen() {
         )}
       </View>
 
-      <View style={[styles.card, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.backgroundDefault,
+            borderColor: theme.border,
+          },
+        ]}
+      >
         <ThemedText type="h4" style={styles.cardTitle}>
           Attendance Summary
         </ThemedText>
@@ -210,16 +257,22 @@ export default function StudentDetailScreen() {
             <ThemedText type="h2" style={{ color: theme.primary }}>
               {stats.attended}
             </ThemedText>
-            <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.statLabel, { color: theme.textSecondary }]}
+            >
               Sessions Attended
             </ThemedText>
           </View>
-          <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+          <View
+            style={[styles.statDivider, { backgroundColor: theme.border }]}
+          />
           <View style={styles.statItem}>
             <ThemedText type="h2" style={{ color: theme.primary }}>
               {attendancePercentage}%
             </ThemedText>
-            <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.statLabel, { color: theme.textSecondary }]}
+            >
               Attendance Rate
             </ThemedText>
           </View>

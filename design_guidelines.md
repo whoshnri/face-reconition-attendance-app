@@ -143,10 +143,11 @@ Secondary screens (accessed via stack navigation):
 
 ### Color Palette
 **Primary Colors**:
-- Primary: #2563EB (Blue - professional, trustworthy)
-- Primary Dark: #1E40AF
-- Success: #10B981 (Green - successful recognition)
-- Warning: #F59E0B (Yellow - already marked)
+- Primary: #16A34A (Green - fresh, growth, positive)
+- Primary Dark: #15803D
+- Secondary: #EAB308 (Yellow - energetic, highlights)
+- Success: #10B981 (Teal Green - successful recognition)
+- Warning: #F59E0B (Amber - already marked)
 - Error: #EF4444 (Red - recognition failed)
 - Background: #F9FAFB (Light gray)
 - Surface: #FFFFFF

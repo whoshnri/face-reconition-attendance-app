@@ -22,15 +22,25 @@ type RouteType = RouteProp<ReportsStackParamList, "SessionDetail">;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-function AttendeeItem({ name, timestamp }: { name: string; timestamp: string }) {
+function AttendeeItem({
+  name,
+  timestamp,
+}: {
+  name: string;
+  timestamp: string;
+}) {
   const { theme } = useTheme();
 
   return (
     <View style={[styles.attendeeItem, { borderBottomColor: theme.border }]}>
-      <View style={[styles.statusDot, { backgroundColor: Colors.light.success }]} />
+      <View
+        style={[styles.statusDot, { backgroundColor: Colors.light.success }]}
+      />
       <View style={styles.attendeeInfo}>
         <ThemedText style={styles.attendeeName}>{name}</ThemedText>
-        <ThemedText style={[styles.attendeeTime, { color: theme.textSecondary }]}>
+        <ThemedText
+          style={[styles.attendeeTime, { color: theme.textSecondary }]}
+        >
           Marked at {timestamp}
         </ThemedText>
       </View>
@@ -43,11 +53,20 @@ function AbsentItem({ name }: { name: string }) {
   const { theme } = useTheme();
 
   return (
-    <View style={[styles.attendeeItem, { borderBottomColor: theme.border, opacity: 0.6 }]}>
-      <View style={[styles.statusDot, { backgroundColor: theme.textDisabled }]} />
+    <View
+      style={[
+        styles.attendeeItem,
+        { borderBottomColor: theme.border, opacity: 0.6 },
+      ]}
+    >
+      <View
+        style={[styles.statusDot, { backgroundColor: theme.textDisabled }]}
+      />
       <View style={styles.attendeeInfo}>
         <ThemedText style={styles.attendeeName}>{name}</ThemedText>
-        <ThemedText style={[styles.attendeeTime, { color: theme.textSecondary }]}>
+        <ThemedText
+          style={[styles.attendeeTime, { color: theme.textSecondary }]}
+        >
           Not marked
         </ThemedText>
       </View>
@@ -65,9 +84,10 @@ export default function SessionDetailScreen() {
   const [showAbsent, setShowAbsent] = useState(false);
 
   const session = route.params.session;
-  const attendanceRate = session.totalCount > 0
-    ? Math.round((session.presentCount / session.totalCount) * 100)
-    : 0;
+  const attendanceRate =
+    session.totalCount > 0
+      ? Math.round((session.presentCount / session.totalCount) * 100)
+      : 0;
 
   const presentStudentIds = new Set(session.attendees.map((a) => a.studentId));
   const absentStudents = students.filter((s) => !presentStudentIds.has(s.id));
@@ -104,7 +124,15 @@ export default function SessionDetailScreen() {
   return (
     <ThemedView style={styles.container}>
       <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
-        <View style={[styles.summaryCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        <View
+          style={[
+            styles.summaryCard,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
+          ]}
+        >
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <Feather name="calendar" size={18} color={theme.primary} />
@@ -128,13 +156,23 @@ export default function SessionDetailScreen() {
           </View>
           <View style={styles.attendanceStats}>
             <View style={styles.statItem}>
-              <View style={[styles.statDot, { backgroundColor: Colors.light.success }]} />
+              <View
+                style={[
+                  styles.statDot,
+                  { backgroundColor: Colors.light.success },
+                ]}
+              />
               <ThemedText style={styles.statLabel}>
                 {session.presentCount} Present
               </ThemedText>
             </View>
             <View style={styles.statItem}>
-              <View style={[styles.statDot, { backgroundColor: theme.textDisabled }]} />
+              <View
+                style={[
+                  styles.statDot,
+                  { backgroundColor: theme.textDisabled },
+                ]}
+              />
               <ThemedText style={styles.statLabel}>
                 {absentStudents.length} Absent
               </ThemedText>
@@ -158,7 +196,13 @@ export default function SessionDetailScreen() {
           renderItem={({ item }) => (
             <AttendeeItem name={item.name} timestamp={item.timestamp} />
           )}
-          style={[styles.list, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}
+          style={[
+            styles.list,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
+          ]}
           ListFooterComponent={
             absentStudents.length > 0 ? (
               <>
@@ -167,7 +211,12 @@ export default function SessionDetailScreen() {
                   style={styles.absentHeader}
                 >
                   <View style={styles.absentHeaderContent}>
-                    <ThemedText style={[styles.absentTitle, { color: theme.textSecondary }]}>
+                    <ThemedText
+                      style={[
+                        styles.absentTitle,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
                       Absent Students ({absentStudents.length})
                     </ThemedText>
                     <Feather
@@ -185,7 +234,9 @@ export default function SessionDetailScreen() {
               </>
             ) : null
           }
-          contentContainerStyle={{ paddingBottom: tabBarHeight + Spacing.xl + 60 }}
+          contentContainerStyle={{
+            paddingBottom: tabBarHeight + Spacing.xl + 60,
+          }}
           showsVerticalScrollIndicator={false}
         />
       </View>

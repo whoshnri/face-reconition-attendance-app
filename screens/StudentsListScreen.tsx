@@ -55,10 +55,14 @@ function StudentCard({
   };
 
   const handleLongPress = () => {
-    Alert.alert("Delete Student", `Are you sure you want to delete ${student.name}?`, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: onDelete },
-    ]);
+    Alert.alert(
+      "Delete Student",
+      `Are you sure you want to delete ${student.name}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: onDelete },
+      ],
+    );
   };
 
   return (
@@ -69,14 +73,21 @@ function StudentCard({
       onLongPress={handleLongPress}
       style={[
         styles.studentCard,
-        { backgroundColor: theme.backgroundDefault, borderColor: theme.cardBorder },
+        {
+          backgroundColor: theme.backgroundDefault,
+          borderColor: theme.cardBorder,
+        },
         animatedStyle,
       ]}
     >
       <View
         style={[
           styles.avatar,
-          { backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundSecondary },
+          {
+            backgroundColor: isDark
+              ? Colors.dark.backgroundSecondary
+              : Colors.light.backgroundSecondary,
+          },
         ]}
       >
         <Feather name="user" size={24} color={theme.textSecondary} />
@@ -89,11 +100,25 @@ function StudentCard({
       </View>
       <View style={styles.enrollmentStatus}>
         {student.faceEnrolled ? (
-          <View style={[styles.statusBadge, { backgroundColor: Colors.light.success + "20" }]}>
-            <Feather name="check-circle" size={16} color={Colors.light.success} />
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: Colors.light.success + "20" },
+            ]}
+          >
+            <Feather
+              name="check-circle"
+              size={16}
+              color={Colors.light.success}
+            />
           </View>
         ) : (
-          <View style={[styles.statusBadge, { backgroundColor: theme.backgroundSecondary }]}>
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: theme.backgroundSecondary },
+            ]}
+          >
             <Feather name="camera" size={16} color={theme.textSecondary} />
           </View>
         )}
@@ -113,7 +138,12 @@ function EmptyState({ onAddStudent }: { onAddStudent: () => void }) {
 
   return (
     <View style={styles.emptyContainer}>
-      <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundSecondary }]}>
+      <View
+        style={[
+          styles.emptyIcon,
+          { backgroundColor: theme.backgroundSecondary },
+        ]}
+      >
         <Feather name="users" size={48} color={theme.textSecondary} />
       </View>
       <ThemedText type="h3" style={styles.emptyTitle}>
@@ -130,7 +160,11 @@ function EmptyState({ onAddStudent }: { onAddStudent: () => void }) {
         onPressOut={() => {
           scale.value = withSpring(1, { damping: 15, stiffness: 150 });
         }}
-        style={[styles.addButton, { backgroundColor: theme.primary }, animatedStyle]}
+        style={[
+          styles.addButton,
+          { backgroundColor: theme.primary },
+          animatedStyle,
+        ]}
       >
         <Feather name="plus" size={20} color="#FFFFFF" />
         <ThemedText style={styles.addButtonText}>Add Student</ThemedText>
@@ -151,7 +185,7 @@ export default function StudentsListScreen() {
   const filteredStudents = students.filter(
     (s) =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.studentId.toLowerCase().includes(searchQuery.toLowerCase())
+      s.studentId.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const handleAddStudent = () => {

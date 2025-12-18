@@ -5,56 +5,32 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as db from "@/lib/database";
 
-export type Student = {
-  id: string;
-  name: string;
-  studentId: string;
-  faceEnrolled: boolean;
-  enrolledDate?: string;
-  createdAt: string;
-};
-
-export type AttendanceRecord = {
-  studentId: string;
-  name: string;
-  timestamp: string;
-};
-
-export type AttendanceSession = {
-  id: string;
-  date: string;
-  time: string;
-  presentCount: number;
-  totalCount: number;
-  attendees: AttendanceRecord[];
-};
+export type { Student, AttendanceRecord, AttendanceSession } from "@/lib/database";
 
 type AppContextType = {
-  students: Student[];
-  sessions: AttendanceSession[];
+  students: db.Student[];
+  sessions: db.AttendanceSession[];
   currentSessionId: string | null;
   isLoading: boolean;
-  addStudent: (name: string, studentId: string) => Promise<Student>;
+  addStudent: (name: string, studentId: string) => Promise<db.Student>;
   updateStudent: (id: string, name: string, studentId: string) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
   enrollFace: (id: string) => Promise<void>;
   startSession: () => Promise<string>;
   markAttendance: (studentId: string) => Promise<boolean>;
   endSession: () => void;
-  getStudentById: (id: string) => Student | undefined;
-  getSessionById: (id: string) => AttendanceSession | undefined;
-  getTodayAttendance: () => AttendanceRecord[];
-  getStudentAttendanceStats: (studentId: string) => { attended: number; total: number };
+  getStudentById: (id: string) => db.Student | undefined;
+  getSessionById: (id: string) => db.AttendanceSession | undefined;
+  getTodayAttendance: () => db.AttendanceRecord[];
+  getStudentAttendanceStats: (studentId: string) => {
+    attended: number;
+    total: number;
+  };
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
-
-const STORAGE_KEYS = {
-  STUDENTS: "@faceattend_students",
-  SESSIONS: "@faceattend_sessions",
-};
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
@@ -77,8 +53,8 @@ function formatTime(date: Date): string {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [sessions, setSessions] = useState<AttendanceSession[]>([]);
+  const [students, setStudents] = useState<db.Student[]>([]);
+  const [sessions, setSessions] = useState<db.AttendanceSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -88,17 +64,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const loadData = async () => {
     try {
+      await db.openDatabase();
       const [studentsData, sessionsData] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.STUDENTS),
-        AsyncStorage.getItem(STORAGE_KEYS.SESSIONS),
+        db.getAllStudents(),
+        db.getAllSessions(),
       ]);
-
-      if (studentsData) {
-        setStudents(JSON.parse(studentsData));
-      }
-      if (sessionsData) {
-        setSessions(JSON.parse(sessionsData));
-      }
+      setStudents(studentsData);
+      setSessions(sessionsData);
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -106,81 +78,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const saveStudents = async (newStudents: Student[]) => {
-    try {
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.STUDENTS,
-        JSON.stringify(newStudents)
-      );
-    } catch (error) {
-      console.error("Error saving students:", error);
-    }
-  };
-
-  const saveSessions = async (newSessions: AttendanceSession[]) => {
-    try {
-      await AsyncStorage.setItem(
-        STORAGE_KEYS.SESSIONS,
-        JSON.stringify(newSessions)
-      );
-    } catch (error) {
-      console.error("Error saving sessions:", error);
-    }
-  };
-
-  const addStudent = async (name: string, studentId: string): Promise<Student> => {
-    const newStudent: Student = {
-      id: generateId(),
+  const addStudent = async (
+    name: string,
+    studentId: string,
+  ): Promise<db.Student> => {
+    const id = generateId();
+    const createdAt = new Date().toISOString();
+    await db.addStudent(id, name, studentId, createdAt);
+    const newStudent: db.Student = {
+      id,
       name,
       studentId,
       faceEnrolled: false,
-      createdAt: new Date().toISOString(),
+      createdAt,
     };
-    const newStudents = [...students, newStudent];
-    setStudents(newStudents);
-    await saveStudents(newStudents);
+    setStudents((prev) => [newStudent, ...prev]);
     return newStudent;
   };
 
   const updateStudent = async (id: string, name: string, studentId: string) => {
-    const newStudents = students.map((s) =>
-      s.id === id ? { ...s, name, studentId } : s
+    await db.updateStudent(id, name, studentId);
+    setStudents((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, name, studentId } : s)),
     );
-    setStudents(newStudents);
-    await saveStudents(newStudents);
   };
 
   const deleteStudent = async (id: string) => {
-    const newStudents = students.filter((s) => s.id !== id);
-    setStudents(newStudents);
-    await saveStudents(newStudents);
+    await db.deleteStudent(id);
+    setStudents((prev) => prev.filter((s) => s.id !== id));
   };
 
   const enrollFace = async (id: string) => {
-    const newStudents = students.map((s) =>
-      s.id === id
-        ? { ...s, faceEnrolled: true, enrolledDate: new Date().toISOString() }
-        : s
+    const enrolledDate = new Date().toISOString();
+    await db.enrollFace(id, enrolledDate);
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === id ? { ...s, faceEnrolled: true, enrolledDate } : s,
+      ),
     );
-    setStudents(newStudents);
-    await saveStudents(newStudents);
   };
 
   const startSession = async (): Promise<string> => {
     const now = new Date();
     const sessionId = generateId();
-    const newSession: AttendanceSession = {
+    const date = formatDate(now);
+    const time = formatTime(now);
+    await db.addSession(sessionId, date, time, students.length);
+    const newSession: db.AttendanceSession = {
       id: sessionId,
-      date: formatDate(now),
-      time: formatTime(now),
+      date,
+      time,
       presentCount: 0,
       totalCount: students.length,
       attendees: [],
     };
-    const newSessions = [newSession, ...sessions];
-    setSessions(newSessions);
+    setSessions((prev) => [newSession, ...prev]);
     setCurrentSessionId(sessionId);
-    await saveSessions(newSessions);
     return sessionId;
   };
 
@@ -190,35 +143,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const student = students.find((s) => s.id === studentId);
     if (!student) return false;
 
-    let alreadyMarked = false;
-    const currentSession = sessions.find((s) => s.id === currentSessionId);
-    
-    if (currentSession?.attendees.some((a) => a.studentId === studentId)) {
-      alreadyMarked = true;
-      return false;
-    }
+    const alreadyMarked = await db.isAlreadyMarked(currentSessionId, studentId);
+    if (alreadyMarked) return false;
 
-    const newSessions = sessions.map((session) => {
-      if (session.id === currentSessionId) {
-        return {
-          ...session,
-          presentCount: session.presentCount + 1,
-          attendees: [
-            ...session.attendees,
-            {
-              studentId,
-              name: student.name,
-              timestamp: formatTime(new Date()),
-            },
-          ],
-        };
-      }
-      return session;
-    });
+    const timestamp = formatTime(new Date());
+    await db.markAttendance(currentSessionId, studentId, student.name, timestamp);
 
-    setSessions(newSessions);
-    await saveSessions(newSessions);
-    return !alreadyMarked;
+    setSessions((prev) =>
+      prev.map((session) => {
+        if (session.id === currentSessionId) {
+          return {
+            ...session,
+            presentCount: session.presentCount + 1,
+            attendees: [
+              ...session.attendees,
+              { studentId, name: student.name, timestamp },
+            ],
+          };
+        }
+        return session;
+      }),
+    );
+    return true;
   };
 
   const endSession = () => {
@@ -229,10 +175,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const getSessionById = (id: string) => sessions.find((s) => s.id === id);
 
-  const getTodayAttendance = (): AttendanceRecord[] => {
+  const getTodayAttendance = (): db.AttendanceRecord[] => {
     const today = formatDate(new Date());
     const todaySessions = sessions.filter((s) => s.date === today);
-    const allAttendees: AttendanceRecord[] = [];
+    const allAttendees: db.AttendanceRecord[] = [];
     todaySessions.forEach((session) => {
       session.attendees.forEach((a) => {
         if (!allAttendees.some((att) => att.studentId === a.studentId)) {

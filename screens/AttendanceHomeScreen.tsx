@@ -37,7 +37,12 @@ function StatCard({
   const { theme } = useTheme();
 
   return (
-    <View style={[styles.statCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+    <View
+      style={[
+        styles.statCard,
+        { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+      ]}
+    >
       <View style={[styles.statIcon, { backgroundColor: color + "15" }]}>
         <Feather name={icon} size={20} color={color} />
       </View>
@@ -56,7 +61,9 @@ function RecentAttendanceItem({ name, time }: { name: string; time: string }) {
 
   return (
     <View style={styles.recentItem}>
-      <View style={[styles.recentDot, { backgroundColor: Colors.light.success }]} />
+      <View
+        style={[styles.recentDot, { backgroundColor: Colors.light.success }]}
+      />
       <ThemedText style={styles.recentName}>{name}</ThemedText>
       <ThemedText style={[styles.recentTime, { color: theme.textSecondary }]}>
         {time}
@@ -107,7 +114,15 @@ export default function AttendanceHomeScreen() {
           },
         ]}
       >
-        <View style={[styles.dateCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+        <View
+          style={[
+            styles.dateCard,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+            },
+          ]}
+        >
           <Feather name="calendar" size={20} color={theme.primary} />
           <ThemedText style={styles.dateText}>{todayDate}</ThemedText>
         </View>
@@ -143,7 +158,15 @@ export default function AttendanceHomeScreen() {
         </View>
 
         {todayAttendance.length > 0 ? (
-          <View style={[styles.recentCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <View
+            style={[
+              styles.recentCard,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
             <ThemedText type="h4" style={styles.recentTitle}>
               Recent Attendance
             </ThemedText>
@@ -156,12 +179,24 @@ export default function AttendanceHomeScreen() {
             ))}
           </View>
         ) : (
-          <View style={[styles.emptyCard, { backgroundColor: theme.backgroundDefault, borderColor: theme.border }]}>
+          <View
+            style={[
+              styles.emptyCard,
+              {
+                backgroundColor: theme.backgroundDefault,
+                borderColor: theme.border,
+              },
+            ]}
+          >
             <Feather name="inbox" size={32} color={theme.textDisabled} />
-            <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.emptyText, { color: theme.textSecondary }]}
+            >
               No attendance recorded today
             </ThemedText>
-            <ThemedText style={[styles.emptySubtext, { color: theme.textDisabled }]}>
+            <ThemedText
+              style={[styles.emptySubtext, { color: theme.textDisabled }]}
+            >
               Tap the camera button to start a session
             </ThemedText>
           </View>
@@ -180,7 +215,8 @@ export default function AttendanceHomeScreen() {
         style={[
           styles.fab,
           {
-            backgroundColor: enrolledCount === 0 ? theme.textDisabled : theme.primary,
+            backgroundColor:
+              enrolledCount === 0 ? theme.textDisabled : theme.secondary,
             bottom: tabBarHeight + Spacing.xl,
             ...Shadows.fab,
           },

@@ -25,7 +25,9 @@ export default function AddEditStudentScreen() {
 
   const [name, setName] = useState(existingStudent?.name || "");
   const [studentId, setStudentId] = useState(existingStudent?.studentId || "");
-  const [errors, setErrors] = useState<{ name?: string; studentId?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; studentId?: string }>(
+    {},
+  );
 
   const isValid = name.trim().length > 0 && studentId.trim().length > 0;
 
@@ -42,7 +44,7 @@ export default function AddEditStudentScreen() {
       const duplicate = students.find(
         (s) =>
           s.studentId.toLowerCase() === studentId.trim().toLowerCase() &&
-          s.id !== existingStudent?.id
+          s.id !== existingStudent?.id,
       );
       if (duplicate) {
         newErrors.studentId = "This Student ID already exists";
@@ -71,8 +73,12 @@ export default function AddEditStudentScreen() {
         "Are you sure you want to discard your changes?",
         [
           { text: "Keep Editing", style: "cancel" },
-          { text: "Discard", style: "destructive", onPress: () => navigation.goBack() },
-        ]
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: () => navigation.goBack(),
+          },
+        ],
       );
     } else {
       navigation.goBack();
@@ -84,7 +90,10 @@ export default function AddEditStudentScreen() {
       headerLeft: () => (
         <Pressable
           onPress={handleCancel}
-          style={({ pressed }) => [styles.headerButton, { opacity: pressed ? 0.7 : 1 }]}
+          style={({ pressed }) => [
+            styles.headerButton,
+            { opacity: pressed ? 0.7 : 1 },
+          ]}
         >
           <ThemedText style={{ color: theme.primary }}>Cancel</ThemedText>
         </Pressable>
@@ -142,7 +151,9 @@ export default function AddEditStudentScreen() {
               styles.input,
               {
                 backgroundColor: theme.backgroundDefault,
-                borderColor: errors.studentId ? Colors.light.error : theme.border,
+                borderColor: errors.studentId
+                  ? Colors.light.error
+                  : theme.border,
                 color: theme.text,
               },
             ]}
@@ -151,7 +162,8 @@ export default function AddEditStudentScreen() {
             value={studentId}
             onChangeText={(text) => {
               setStudentId(text);
-              if (errors.studentId) setErrors((e) => ({ ...e, studentId: undefined }));
+              if (errors.studentId)
+                setErrors((e) => ({ ...e, studentId: undefined }));
             }}
             autoCapitalize="characters"
           />

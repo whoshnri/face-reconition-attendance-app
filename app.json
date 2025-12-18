@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.faceattend.app"
+      "bundleIdentifier": "com.faceattend.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +24,11 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.faceattend.app"
+      "package": "com.faceattend.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "single",
@@ -46,10 +53,17 @@
         {
           "cameraPermission": "Allow FaceAttend to access your camera for facial recognition and attendance."
         }
-      ]
+      ],
+      "expo-sqlite",
+      "react-native-vision-camera"
     ],
     "experiments": {
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "692e0290-b3ab-4cca-b6d4-23408664aebd"
+      }
     }
   }
 }

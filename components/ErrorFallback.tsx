@@ -58,16 +58,22 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       ) : null}
 
       <View style={styles.content}>
-        <View style={[styles.iconContainer, { backgroundColor: theme.backgroundSecondary }]}>
+        <View
+          style={[
+            styles.iconContainer,
+            { backgroundColor: theme.backgroundSecondary },
+          ]}
+        >
           <Feather name="alert-triangle" size={48} color={theme.primary} />
         </View>
-        
+
         <ThemedText type="h1" style={styles.title}>
           Oops! Something went wrong
         </ThemedText>
 
         <ThemedText type="body" style={styles.message}>
-          FaceAttend encountered an unexpected issue. Please restart the app to continue managing your attendance.
+          FaceAttend encountered an unexpected issue. Please restart the app to
+          continue managing your attendance.
         </ThemedText>
 
         <Pressable
