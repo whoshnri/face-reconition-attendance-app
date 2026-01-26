@@ -16,6 +16,7 @@
       }
     },
     "android": {
+      "minSdkVersion": 26,
       "adaptiveIcon": {
         "backgroundColor": "#2563EB",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -27,6 +28,8 @@
       "package": "com.faceattend.app",
       "permissions": [
         "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -35,6 +38,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -47,15 +58,9 @@
           }
         }
       ],
-      "expo-web-browser",
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow FaceAttend to access your camera for facial recognition and attendance."
-        }
-      ],
       "expo-sqlite",
-      "react-native-vision-camera"
+      "react-native-vision-camera",
+      "expo-build-properties"
     ],
     "experiments": {
       "reactCompiler": true
@@ -64,6 +69,12 @@
       "eas": {
         "projectId": "692e0290-b3ab-4cca-b6d4-23408664aebd"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/692e0290-b3ab-4cca-b6d4-23408664aebd"
     }
   }
 }

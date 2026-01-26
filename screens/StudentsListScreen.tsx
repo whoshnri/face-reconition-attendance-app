@@ -6,16 +6,13 @@ import {
   Pressable,
   FlatList,
   Alert,
+  Animated,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AnimatedPressable } from "@/components/AnimatedPressable";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 
@@ -28,8 +25,6 @@ import { StudentsStackParamList } from "@/navigation/StudentsStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<StudentsStackParamList>;
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 function StudentCard({
   student,
   onPress,
@@ -40,19 +35,7 @@ function StudentCard({
   onDelete: () => void;
 }) {
   const { theme, isDark } = useTheme();
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePressIn = () => {
-    scale.value = withSpring(0.98, { damping: 15, stiffness: 150 });
-  };
-
-  const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 150 });
-  };
+  const studentColor = isDark ? theme.text : theme.primary;
 
   const handleLongPress = () => {
     Alert.alert(
@@ -68,8 +51,6 @@ function StudentCard({
   return (
     <AnimatedPressable
       onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
       onLongPress={handleLongPress}
       style={[
         styles.studentCard,
@@ -77,64 +58,60 @@ function StudentCard({
           backgroundColor: theme.backgroundDefault,
           borderColor: theme.cardBorder,
         },
-        animatedStyle,
       ]}
     >
-      <View
-        style={[
-          styles.avatar,
-          {
-            backgroundColor: isDark
-              ? Colors.dark.backgroundSecondary
-              : Colors.light.backgroundSecondary,
-          },
-        ]}
-      >
-        <Feather name="user" size={24} color={theme.textSecondary} />
-      </View>
-      <View style={styles.studentInfo}>
-        <ThemedText style={styles.studentName}>{student.name}</ThemedText>
-        <ThemedText style={[styles.studentId, { color: theme.textSecondary }]}>
-          ID: {student.studentId}
-        </ThemedText>
-      </View>
-      <View style={styles.enrollmentStatus}>
-        {student.faceEnrolled ? (
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: Colors.light.success + "20" },
-            ]}
+        <View
+          style={[
+            styles.avatar,
+            {
+              backgroundColor: isDark
+                ? Colors.dark.backgroundSecondary
+                : Colors.light.backgroundSecondary,
+            },
+          ]}
+        >
+          <Feather name="user" size={24} color={theme.textSecondary} />
+        </View>
+        <View style={styles.studentInfo}>
+          <ThemedText style={styles.studentName}>{student.name}</ThemedText>
+          <ThemedText
+            style={[styles.studentId, { color: theme.textSecondary }]}
           >
-            <Feather
-              name="check-circle"
-              size={16}
-              color={Colors.light.success}
-            />
-          </View>
-        ) : (
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: theme.backgroundSecondary },
-            ]}
-          >
-            <Feather name="camera" size={16} color={theme.textSecondary} />
-          </View>
-        )}
-        <Feather name="chevron-right" size={20} color={theme.textDisabled} />
-      </View>
-    </AnimatedPressable>
+            ID: {student.studentId}
+          </ThemedText>
+        </View>
+        <View style={styles.enrollmentStatus}>
+          {student.faceEnrolled ? (
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: Colors.light.success + "20" },
+              ]}
+            >
+              <Feather
+                name="check-circle"
+                size={16}
+                color={Colors.light.success}
+              />
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: theme.backgroundSecondary },
+              ]}
+            >
+              <Feather name="camera" size={16} color={theme.textSecondary} />
+            </View>
+          )}
+          <Feather name="chevron-right" size={20} color={theme.textDisabled} />
+        </View>
+      </AnimatedPressable>
   );
 }
 
 function EmptyState({ onAddStudent }: { onAddStudent: () => void }) {
   const { theme } = useTheme();
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
 
   return (
     <View style={styles.emptyContainer}>
@@ -154,17 +131,7 @@ function EmptyState({ onAddStudent }: { onAddStudent: () => void }) {
       </ThemedText>
       <AnimatedPressable
         onPress={onAddStudent}
-        onPressIn={() => {
-          scale.value = withSpring(0.95, { damping: 15, stiffness: 150 });
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, { damping: 15, stiffness: 150 });
-        }}
-        style={[
-          styles.addButton,
-          { backgroundColor: theme.primary },
-          animatedStyle,
-        ]}
+        style={[styles.addButton, { backgroundColor: theme.primary }]}
       >
         <Feather name="plus" size={20} color="#FFFFFF" />
         <ThemedText style={styles.addButtonText}>Add Student</ThemedText>
@@ -178,7 +145,6 @@ export default function StudentsListScreen() {
   const { theme, isDark } = useTheme();
   const { students, deleteStudent } = useApp();
   const [searchQuery, setSearchQuery] = useState("");
-  const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
 
@@ -213,65 +179,70 @@ export default function StudentsListScreen() {
   }, [navigation, theme]);
 
   return (
-    <ThemedView style={styles.container}>
-      <View
-        style={[
-          styles.searchContainer,
-          {
-            backgroundColor: theme.backgroundDefault,
-            borderColor: theme.border,
-            marginTop: headerHeight + Spacing.md,
-          },
-        ]}
-      >
-        <Feather name="search" size={20} color={theme.textSecondary} />
-        <TextInput
-          style={[styles.searchInput, { color: theme.text }]}
-          placeholder="Search students..."
-          placeholderTextColor={theme.textDisabled}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 ? (
-          <Pressable onPress={() => setSearchQuery("")}>
-            <Feather name="x" size={20} color={theme.textSecondary} />
-          </Pressable>
-        ) : null}
-      </View>
-
-      {students.length === 0 ? (
-        <EmptyState onAddStudent={handleAddStudent} />
-      ) : (
-        <FlatList
-          data={filteredStudents}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <StudentCard
-              student={item}
-              onPress={() => handleStudentPress(item)}
-              onDelete={() => deleteStudent(item.id)}
-            />
-          )}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: tabBarHeight + Spacing.xl },
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ThemedView style={styles.innerContainer}>
+        <View
+          style={[
+            styles.searchContainer,
+            {
+              backgroundColor: theme.backgroundDefault,
+              borderColor: theme.border,
+              marginTop: headerHeight + Spacing.md,
+            },
           ]}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.noResults}>
-              <ThemedText style={{ color: theme.textSecondary }}>
-                No students match your search
-              </ThemedText>
-            </View>
-          }
-        />
-      )}
-    </ThemedView>
+        >
+          <Feather name="search" size={20} color={theme.textSecondary} />
+          <TextInput
+            style={[styles.searchInput, { color: theme.text }]}
+            placeholder="Search students..."
+            placeholderTextColor={theme.textDisabled}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable onPress={() => setSearchQuery("")}>
+              <Feather name="x" size={20} color={theme.textSecondary} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {students.length === 0 ? (
+          <EmptyState onAddStudent={handleAddStudent} />
+        ) : (
+          <FlatList
+            data={filteredStudents}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <StudentCard
+                student={item}
+                onPress={() => handleStudentPress(item)}
+                onDelete={() => deleteStudent(item.id)}
+              />
+            )}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: tabBarHeight + Spacing.xl },
+            ]}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.noResults}>
+                <ThemedText style={{ color: theme.textSecondary }}>
+                  No students match your search
+                </ThemedText>
+              </View>
+            }
+          />
+        )}
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  innerContainer: {
     flex: 1,
   },
   headerButton: {

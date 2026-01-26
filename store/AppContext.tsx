@@ -7,7 +7,11 @@ import React, {
 } from "react";
 import * as db from "@/lib/database";
 
-export type { Student, AttendanceRecord, AttendanceSession } from "@/lib/database";
+export type {
+  Student,
+  AttendanceRecord,
+  AttendanceSession,
+} from "@/lib/database";
 
 type AppContextType = {
   students: db.Student[];
@@ -18,7 +22,7 @@ type AppContextType = {
   updateStudent: (id: string, name: string, studentId: string) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
   enrollFace: (id: string) => Promise<void>;
-  startSession: () => Promise<string>;
+  startSession: (sessionDate?: Date) => Promise<string>;
   markAttendance: (studentId: string) => Promise<boolean>;
   endSession: () => void;
   getStudentById: (id: string) => db.Student | undefined;
@@ -28,6 +32,8 @@ type AppContextType = {
     attended: number;
     total: number;
   };
+  deleteSession: (id: string) => Promise<void>;
+  reactivateSession: (id: string) => void;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -118,8 +124,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const startSession = async (): Promise<string> => {
-    const now = new Date();
+  const startSession = async (sessionDate?: Date): Promise<string> => {
+    const now = sessionDate || new Date();
     const sessionId = generateId();
     const date = formatDate(now);
     const time = formatTime(now);
@@ -137,6 +143,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return sessionId;
   };
 
+  const deleteSession = async (id: string) => {
+    await db.deleteSession(id);
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    if (currentSessionId === id) {
+      setCurrentSessionId(null);
+    }
+  };
+
+  const reactivateSession = (id: string) => {
+    setCurrentSessionId(id);
+  };
+
   const markAttendance = async (studentId: string): Promise<boolean> => {
     if (!currentSessionId) return false;
 
@@ -147,7 +165,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (alreadyMarked) return false;
 
     const timestamp = formatTime(new Date());
-    await db.markAttendance(currentSessionId, studentId, student.name, timestamp);
+    await db.markAttendance(
+      currentSessionId,
+      studentId,
+      student.name,
+      timestamp,
+    );
 
     setSessions((prev) =>
       prev.map((session) => {
@@ -217,6 +240,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getSessionById,
         getTodayAttendance,
         getStudentAttendanceStats,
+        deleteSession,
+        reactivateSession,
       }}
     >
       {children}

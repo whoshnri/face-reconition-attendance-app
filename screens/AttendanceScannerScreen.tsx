@@ -1,58 +1,49 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, Pressable, Platform } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import { View, StyleSheet, Pressable, Animated } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withSequence,
-  withTiming,
-  runOnJS,
-  FadeIn,
-  FadeOut,
-  SlideInDown,
-  SlideOutDown,
-} from "react-native-reanimated";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+
 import {
   Camera,
   useCameraDevice,
+  useFrameProcessor,
+  useCameraFormat,
   useCameraPermission,
 } from "react-native-vision-camera";
-import { useFaceDetection } from "@infinitered/react-native-mlkit-face-detection";
+import { useFaceDetector } from "react-native-vision-camera-face-detector";
+import { Worklets } from "react-native-worklets-core";
+import { useResizePlugin } from "vision-camera-resize-plugin";
+import { useTensorflowModel } from "react-native-fast-tflite";
+import { useSharedValue } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Colors, BorderRadius } from "@/constants/theme";
 import { useApp } from "@/store/AppContext";
-import { AttendanceStackParamList } from "@/navigation/AttendanceStackNavigator";
 import {
-  loadFaceModel,
-  isModelLoaded,
+  normalizeEmbedding,
   findBestMatch,
-  generateEmbeddingFromPhoto,
+  ensureArray,
 } from "@/lib/faceRecognition";
 import { getAllFaceEmbeddings } from "@/lib/database";
+import { useTheme } from "@/hooks/useTheme";
+import { AnimatedPressable } from "@/components/AnimatedPressable";
 
-type NavigationProp = NativeStackNavigationProp<AttendanceStackParamList>;
-type RouteType = RouteProp<AttendanceStackParamList, "AttendanceScanner">;
+type NavigationProp = ReturnType<typeof useNavigation<any>>;
+type RouteType = ReturnType<typeof useRoute<any>>;
 
 type RecognitionResult = {
   type: "success" | "duplicate" | "unknown";
   name?: string;
 };
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 export default function AttendanceScannerScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteType>();
-  const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const {
     students,
     markAttendance,
@@ -61,22 +52,37 @@ export default function AttendanceScannerScreen() {
     currentSessionId,
   } = useApp();
 
-  // Camera setup
+  // --- 1. SETTINGS & REFS ---
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("front");
-  const cameraRef = useRef<Camera>(null);
+  const format = useCameraFormat(device, [
+    { videoResolution: { width: 640, height: 480 } }, // Low res = High speed
+    { fps: 30 }
+  ]);
 
-  // Face detection for photos
-  const { detectFaces } = useFaceDetection();
+  const { resize } = useResizePlugin();
+  const tflite = useTensorflowModel(require("@/assets/models/mobilefacenet.tflite"));
+  const model = tflite.state === "loaded" ? tflite.model : undefined;
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [result, setResult] = useState<RecognitionResult | null>(null);
-  const [sessionTime, setSessionTime] = useState(0);
+  const vectorRef = useRef<Float32Array | null>(null);
+  const isCapturing = useRef(false);
+  const frameCounter = useSharedValue(0);
+
+  // --- 2. STATE ---
+  const [status, setStatus] = useState<"loading" | "positioning" | "processing" | "success">("loading");
   const [faceDetected, setFaceDetected] = useState(false);
-  const [modelLoaded, setModelLoaded] = useState(false);
+  const [result, setResult] = useState<RecognitionResult | null>(null);
   const [storedEmbeddings, setStoredEmbeddings] = useState<
     Array<{ studentId: string; embedding: number[] }>
   >([]);
+  const pulseScale = useRef(new Animated.Value(1)).current;
+
+  // --- 3. DETECTOR CONFIG ---
+  const { detectFaces } = useFaceDetector({
+    performanceMode: "fast",
+    classificationMode: "none",
+    landmarkMode: "none",
+  });
 
   const enrolledStudents = students.filter((s) => s.faceEnrolled);
   const currentSession = currentSessionId
@@ -84,158 +90,160 @@ export default function AttendanceScannerScreen() {
     : null;
   const presentCount = currentSession?.presentCount || 0;
 
-  const frameScale = useSharedValue(1);
-  const isProcessing = useRef(false);
-  const lastRecognitionTime = useRef(0);
-
-  // Load model and embeddings on mount
+  // Load embeddings once on mount
   useEffect(() => {
-    const init = async () => {
+    const loadEmbeddings = async () => {
       try {
-        if (!isModelLoaded()) {
-          await loadFaceModel();
-        }
-        setModelLoaded(true);
-
-        // Load all stored embeddings
         const embeddings = await getAllFaceEmbeddings();
         setStoredEmbeddings(embeddings);
+        if (model) setStatus("positioning");
       } catch (error) {
-        console.error("Failed to initialize scanner:", error);
+        console.error("Failed to load embeddings:", error);
       }
     };
-    init();
+    loadEmbeddings();
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setSessionTime((t) => t + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+    if (model && storedEmbeddings.length > 0) setStatus("positioning");
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseScale, { toValue: 1.05, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseScale, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [model, storedEmbeddings.length]);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  // Periodic face presence check using photo
+  // Request permission on mount
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    if (!hasPermission) {
+      requestPermission();
+    }
+  }, [hasPermission]);
 
-    if (!isScanning && !result && cameraRef.current && modelLoaded) {
-      interval = setInterval(async () => {
-        try {
-          const photo = await cameraRef.current?.takePhoto();
-          if (photo?.path) {
-            const faceResult = await detectFaces(`file://${photo.path}`);
-            setFaceDetected((faceResult?.faces?.length ?? 0) > 0);
-          }
-        } catch (e) {
-          // Silently handle errors
+  // --- 4. WORKLETS (The High Speed Part) ---
+  const syncFaceState = Worklets.createRunOnJS((isFound: boolean, vector: any) => {
+    if (faceDetected !== isFound) setFaceDetected(isFound);
+    const cleanVector = ensureArray(vector);
+    // console.log(cleanVector)
+    vectorRef.current = cleanVector.length > 0 ? new Float32Array(cleanVector) : null;
+  });
+
+  const frameProcessor = useFrameProcessor((frame) => {
+    "worklet";
+    frameCounter.value += 1;
+
+    // Throttle: Process every 5th frame for performance
+    if (frameCounter.value % 5 !== 0) return;
+
+    const faces = detectFaces(frame);
+
+    if (faces.length > 0 && model != null) {
+      const face = faces[0];
+
+      try {
+        // --- CRITICAL: Coordinate Clamping ---
+        // We ensure the crop never exceeds frame boundaries to prevent model errors
+        const x = Math.max(0, face.bounds.x);
+        const y = Math.max(0, face.bounds.y);
+        const width = Math.min(face.bounds.width, frame.width - x);
+        const height = Math.min(face.bounds.height, frame.height - y);
+
+        const resized = resize(frame, {
+          scale: { width: 112, height: 112 },
+          crop: { x, y, width, height },
+          pixelFormat: "rgb",
+          dataType: "float32",
+        });
+
+        const output = model.runSync([resized]);
+        if (output && output.length > 0) {
+          syncFaceState(true, output[0] as Float32Array);
+        } else {
+          syncFaceState(true, null);
         }
-      }, 500);
+      } catch (e) {
+        syncFaceState(true, null);
+      }
+    } else {
+      syncFaceState(false, null);
     }
+  }, [model, detectFaces]);
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isScanning, result, modelLoaded, detectFaces]);
+  // --- 5. ACTION HANDLER ---
+  const onCapture = async () => {
+    if (isCapturing.current || !vectorRef.current || storedEmbeddings.length === 0) return;
 
-
-  // Perform face recognition
-  const performRecognition = async () => {
-    if (
-      isProcessing.current ||
-      !cameraRef.current ||
-      enrolledStudents.length === 0 ||
-      storedEmbeddings.length === 0
-    ) {
-      return;
-    }
-
-    // Throttle recognition to once every 2 seconds
-    const now = Date.now();
-    if (now - lastRecognitionTime.current < 2000) {
-      return;
-    }
-    lastRecognitionTime.current = now;
-    isProcessing.current = true;
-    setIsScanning(true);
-
-    frameScale.value = withSequence(
-      withTiming(1.05, { duration: 200 }),
-      withTiming(1, { duration: 200 }),
-    );
+    isCapturing.current = true;
+    setStatus("processing");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      // Take a photo for recognition
-      const photo = await cameraRef.current.takePhoto();
+      // Convert Float32Array to number array and normalize
+      const rawEmbedding = Array.from(vectorRef.current);
+      // Normalize the live embedding to match stored normalized embeddings
+      const normalizedEmbedding = normalizeEmbedding(rawEmbedding);
+      // console.log(normalizedEmbedding)
 
-      // Check if face is present
-      const faceResult = await detectFaces(`file://${photo.path}`);
-      if (!faceResult?.faces?.length) {
-        setResult({ type: "unknown" });
-        setIsScanning(false);
-        isProcessing.current = false;
-        setTimeout(() => setResult(null), 2500);
-        return;
-      }
-
-      // Get face bounds for cropping (ML Kit uses 'frame' property)
-      const face = faceResult.faces[0] as any;
-      const faceBounds = face?.frame ? {
-        x: face.frame.x,
-        y: face.frame.y,
-        width: face.frame.width,
-        height: face.frame.height,
-      } : undefined;
-
-      // Generate real embedding from the photo
-      const liveEmbedding = await generateEmbeddingFromPhoto(
-        `file://${photo.path}`,
-        faceBounds
-      );
-
-      // Try to find a match
-      const match = findBestMatch(liveEmbedding, storedEmbeddings);
-
+      // Compare against all stored embeddings using the helper function
+      const match = findBestMatch(normalizedEmbedding, storedEmbeddings);
+      console.log(match)
       if (match) {
-        const matchedStudent = students.find((s) => s.id === match.studentId);
+        const bestMatch = match;
+        const matchedStudent = students.find((s) => s.id === bestMatch!.studentId);
         if (matchedStudent) {
           const wasMarked = await markAttendance(matchedStudent.id);
 
           if (wasMarked) {
             setResult({ type: "success", name: matchedStudent.name });
-            if (Platform.OS !== "web") {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            }
+            setStatus("success");
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+            // Reset after showing success
+            setTimeout(() => {
+              setResult(null);
+              setStatus("positioning");
+              isCapturing.current = false;
+            }, 2000);
           } else {
             setResult({ type: "duplicate", name: matchedStudent.name });
-            if (Platform.OS !== "web") {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            }
+            setStatus("positioning");
+            isCapturing.current = false;
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+
+            setTimeout(() => {
+              setResult(null);
+            }, 2000);
           }
         } else {
           setResult({ type: "unknown" });
+          setStatus("positioning");
+          isCapturing.current = false;
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+          setTimeout(() => {
+            setResult(null);
+          }, 2000);
         }
       } else {
         setResult({ type: "unknown" });
-        if (Platform.OS !== "web") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        }
+        setStatus("positioning");
+        isCapturing.current = false;
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+        setTimeout(() => {
+          setResult(null);
+        }, 2000);
       }
-    } catch (error) {
-      console.error("Recognition failed:", error);
+    } catch (err) {
+      console.error("Recognition failed:", err);
       setResult({ type: "unknown" });
-    } finally {
-      setIsScanning(false);
-      isProcessing.current = false;
+      setStatus("positioning");
+      isCapturing.current = false;
 
       setTimeout(() => {
         setResult(null);
-      }, 2500);
+      }, 2000);
     }
   };
 
@@ -244,229 +252,134 @@ export default function AttendanceScannerScreen() {
     navigation.goBack();
   };
 
-  const frameStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: frameScale.value }],
-    borderColor: faceDetected
-      ? Colors.light.primary
-      : "rgba(255, 255, 255, 0.6)",
-  }));
-
+  // --- 6. RENDER ---
   if (!hasPermission) {
     return (
-      <ThemedView style={[styles.container, styles.permissionContainer]}>
-        <View style={styles.permissionContent}>
-          <View
-            style={[
-              styles.permissionIcon,
-              { backgroundColor: theme.backgroundSecondary },
-            ]}
-          >
-            <Feather name="camera-off" size={48} color={theme.textSecondary} />
+      <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
+        <ThemedView style={styles.permissionContainer}>
+          <View style={styles.iconCircle}>
+            <Feather name="camera-off" size={48} color={Colors.light.error} />
           </View>
-          <ThemedText type="h3" style={styles.permissionTitle}>
-            Camera Access Required
-          </ThemedText>
-          <ThemedText
-            style={[styles.permissionText, { color: theme.textSecondary }]}
-          >
-            We need camera access to scan and recognize faces for attendance.
+          <ThemedText type="h2" style={styles.permissionTitle}>Camera Access Required</ThemedText>
+          <ThemedText style={styles.permissionText}>
+            We need camera access to scan faces for attendance.
           </ThemedText>
           <AnimatedPressable
             onPress={requestPermission}
-            style={[
-              styles.permissionButton,
-              { backgroundColor: theme.primary },
-            ]}
+            style={styles.requestBtn}
           >
-            <Feather name="camera" size={20} color="#FFFFFF" />
-            <ThemedText style={styles.permissionButtonText}>
-              Enable Camera
-            </ThemedText>
+            <ThemedText style={styles.btnText}>Grant Permission</ThemedText>
           </AnimatedPressable>
-          <Pressable onPress={handleClose} style={styles.cancelLink}>
-            <ThemedText style={{ color: theme.textSecondary }}>
-              Cancel
-            </ThemedText>
+          <Pressable onPress={() => navigation.goBack()} style={styles.cancelBtn}>
+            <ThemedText style={styles.cancelText}>Cancel</ThemedText>
           </Pressable>
-        </View>
-      </ThemedView>
-    );
-  }
-
-  if (Platform.OS === "web") {
-    return (
-      <ThemedView style={[styles.container, styles.permissionContainer]}>
-        <View style={styles.permissionContent}>
-          <View
-            style={[
-              styles.permissionIcon,
-              { backgroundColor: theme.backgroundSecondary },
-            ]}
-          >
-            <Feather name="smartphone" size={48} color={theme.textSecondary} />
-          </View>
-          <ThemedText type="h3" style={styles.permissionTitle}>
-            Use Development Build
-          </ThemedText>
-          <ThemedText
-            style={[styles.permissionText, { color: theme.textSecondary }]}
-          >
-            Face scanning requires native camera features. Please use the
-            development build on your Android device.
-          </ThemedText>
-          <Pressable onPress={handleClose} style={styles.cancelLink}>
-            <ThemedText style={{ color: theme.primary }}>Go Back</ThemedText>
-          </Pressable>
-        </View>
-      </ThemedView>
+        </ThemedView>
+      </SafeAreaView>
     );
   }
 
   if (!device) {
     return (
-      <ThemedView style={[styles.container, styles.permissionContainer]}>
-        <View style={styles.permissionContent}>
-          <Feather name="alert-circle" size={48} color={theme.error} />
-          <ThemedText type="h3" style={styles.permissionTitle}>
-            No Camera Found
-          </ThemedText>
-          <ThemedText
-            style={[styles.permissionText, { color: theme.textSecondary }]}
-          >
-            Unable to access the front camera on this device.
-          </ThemedText>
-          <Pressable onPress={handleClose} style={styles.cancelLink}>
-            <ThemedText style={{ color: theme.primary }}>Go Back</ThemedText>
-          </Pressable>
-        </View>
-      </ThemedView>
+      <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
+        <ThemedView style={styles.center}>
+          <ThemedText>Loading Camera...</ThemedText>
+        </ThemedView>
+      </SafeAreaView>
     );
   }
+
+  const getStatusMessage = () => {
+    if (status === "processing") return "Recognizing...";
+    if (status === "success") return "Attendance Marked!";
+    if (result?.type === "duplicate") return "Already Marked";
+    if (result?.type === "unknown") return "Face Not Recognized";
+    if (faceDetected && vectorRef.current) return "Ready to Capture";
+    if (faceDetected) return "Adjusting Face...";
+    return "Align Face in Frame";
+  };
+
+  const getButtonColor = () => {
+    if (status === "processing" || status === "success") return "#444";
+    if (faceDetected && vectorRef.current) return theme.primary;
+    return "#444";
+  };
 
   return (
     <View style={styles.container}>
       <Camera
-        ref={cameraRef}
         style={StyleSheet.absoluteFill}
         device={device}
-        isActive={true}
-        photo={true}
+        format={format}
+        fps={30}
+        isActive={status !== "success"}
         pixelFormat="yuv"
+        frameProcessor={frameProcessor}
       />
 
-      <View style={[styles.overlay, StyleSheet.absoluteFill]}>
-        <View style={[styles.topBar, { paddingTop: insets.top + Spacing.md }]}>
-          <Pressable
-            onPress={handleClose}
-            style={({ pressed }) => [
-              styles.closeButton,
-              { opacity: pressed ? 0.7 : 1 },
+      <View style={[styles.overlay, { paddingTop: insets.top + 20 }]}>
+        <View style={styles.topBar}>
+          <Pressable onPress={handleClose} style={styles.backBtn}>
+            <Feather name="x" size={28} color="white" />
+          </Pressable>
+
+          <View style={styles.sessionInfo}>
+            <View style={styles.infoBadge}>
+              <Feather name="clock" size={14} color="white" />
+              <ThemedText style={styles.infoText}>
+                {presentCount}/{students.length}
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.guideContainer}>
+          <Animated.View
+            style={[
+              styles.faceMask,
+              {
+                transform: [{ scale: pulseScale }],
+                borderColor: faceDetected && vectorRef.current ? theme.primary : 'white'
+              }
+            ]}
+          />
+          <ThemedText style={styles.statusMsg}>
+            {getStatusMessage()}
+          </ThemedText>
+          {result && (
+            <View style={[
+              styles.resultBadge,
+              {
+                backgroundColor: result.type === "success"
+                  ? Colors.light.success
+                  : result.type === "duplicate"
+                    ? Colors.light.warning
+                    : Colors.light.error
+              }
+            ]}>
+              <Feather
+                name={result.type === "success" ? "check-circle" : result.type === "duplicate" ? "alert-circle" : "x-circle"}
+                size={20}
+                color="white"
+              />
+              <ThemedText style={styles.resultText}>
+                {result.name || "Unknown"}
+              </ThemedText>
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 50 }]}>
+          <AnimatedPressable
+            disabled={!faceDetected || !vectorRef.current || status === "processing" || status === "success"}
+            onPress={onCapture}
+            style={[
+              styles.captureBtn,
+              { backgroundColor: getButtonColor() }
             ]}
           >
-            <Feather name="x" size={24} color="#FFFFFF" />
-          </Pressable>
-          <View style={styles.sessionTimer}>
-            <Feather name="clock" size={16} color="#FFFFFF" />
-            <ThemedText style={styles.timerText}>
-              {formatTime(sessionTime)}
-            </ThemedText>
-          </View>
-          <View style={styles.countBadge}>
-            <Feather name="user-check" size={16} color="#FFFFFF" />
-            <ThemedText style={styles.countText}>
-              {presentCount}/{students.length}
-            </ThemedText>
-          </View>
-        </View>
-
-        <View style={styles.frameContainer}>
-          <Animated.View style={[styles.faceFrame, frameStyle]}>
-            {isScanning ? (
-              <View style={styles.scanningIndicator}>
-                <ThemedText style={styles.scanningText}>Scanning...</ThemedText>
-              </View>
-            ) : faceDetected ? (
-              <View style={styles.faceDetectedIndicator}>
-                <ThemedText style={styles.faceDetectedText}>
-                  Face Detected
-                </ThemedText>
-              </View>
-            ) : null}
-          </Animated.View>
-        </View>
-
-        <View
-          style={[
-            styles.bottomSection,
-            { paddingBottom: insets.bottom + Spacing.xl },
-          ]}
-        >
-          {result ? (
-            <Animated.View
-              entering={SlideInDown.springify().damping(15)}
-              exiting={SlideOutDown.springify().damping(15)}
-              style={[
-                styles.resultCard,
-                {
-                  backgroundColor:
-                    result.type === "success"
-                      ? Colors.light.success
-                      : result.type === "duplicate"
-                        ? Colors.light.warning
-                        : Colors.light.error,
-                },
-              ]}
-            >
-              <Feather
-                name={
-                  result.type === "success"
-                    ? "check-circle"
-                    : result.type === "duplicate"
-                      ? "alert-circle"
-                      : "x-circle"
-                }
-                size={24}
-                color="#FFFFFF"
-              />
-              <View style={styles.resultTextContainer}>
-                <ThemedText style={styles.resultName}>
-                  {result.name || "Unknown"}
-                </ThemedText>
-                <ThemedText style={styles.resultStatus}>
-                  {result.type === "success"
-                    ? "Marked Present"
-                    : result.type === "duplicate"
-                      ? "Already marked for this session"
-                      : "Face not recognized"}
-                </ThemedText>
-              </View>
-            </Animated.View>
-          ) : (
-            <AnimatedPressable
-              onPress={performRecognition}
-              disabled={isScanning || !faceDetected || !modelLoaded}
-              style={[
-                styles.scanButton,
-                {
-                  backgroundColor:
-                    isScanning || !faceDetected || !modelLoaded
-                      ? theme.textDisabled
-                      : theme.primary,
-                },
-              ]}
-            >
-              <Feather name="camera" size={24} color="#FFFFFF" />
-              <ThemedText style={styles.scanButtonText}>
-                {!modelLoaded
-                  ? "Loading..."
-                  : isScanning
-                    ? "Scanning..."
-                    : faceDetected
-                      ? "Scan Face"
-                      : "No Face Detected"}
-              </ThemedText>
-            </AnimatedPressable>
-          )}
+            <Feather name="user-check" size={24} color="white" />
+            <ThemedText style={styles.btnText}>Mark Attendance</ThemedText>
+          </AnimatedPressable>
         </View>
       </View>
     </View>
@@ -474,162 +387,84 @@ export default function AttendanceScannerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  permissionContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  permissionContent: {
-    alignItems: "center",
-    paddingHorizontal: Spacing.xl,
-  },
-  permissionIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.lg,
-  },
-  permissionTitle: {
-    textAlign: "center",
-    marginBottom: Spacing.sm,
-  },
-  permissionText: {
-    textAlign: "center",
-    marginBottom: Spacing.xl,
-  },
-  permissionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.full,
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  permissionButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  cancelLink: {
-    padding: Spacing.md,
-  },
-  overlay: {
-    justifyContent: "space-between",
-  },
+  container: { flex: 1, backgroundColor: "black" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  overlay: { flex: 1, justifyContent: "space-between", alignItems: "center" },
   topBar: {
+    width: "100%",
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: Spacing.md,
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    borderRadius: 20,
+    paddingHorizontal: 20,
   },
-  sessionTimer: {
+  backBtn: {
+    alignSelf: "flex-start",
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20
+  },
+  sessionInfo: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.full,
-    gap: Spacing.xs,
+    gap: 8,
   },
-  timerText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  countBadge: {
+  infoBadge: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.light.success,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: BorderRadius.full,
-    gap: Spacing.xs,
+    gap: 6,
   },
-  countText: {
-    color: "#FFFFFF",
+  infoText: {
+    color: "white",
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "600"
   },
-  frameContainer: {
-    alignItems: "center",
-  },
-  faceFrame: {
-    width: 280,
-    height: 350,
+  guideContainer: { alignItems: "center" },
+  faceMask: {
+    width: 250,
+    height: 320,
     borderWidth: 3,
-    borderRadius: BorderRadius.xl,
-    alignItems: "center",
-    justifyContent: "center",
+    borderRadius: 125,
+    borderStyle: "dashed",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
-  scanningIndicator: {
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-  },
-  scanningText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  faceDetectedIndicator: {
-    backgroundColor: "rgba(37, 99, 235, 0.3)",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-  },
-  faceDetectedText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  bottomSection: {
-    paddingHorizontal: Spacing.xl,
-  },
-  resultCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.md,
-  },
-  resultTextContainer: {
-    flex: 1,
-  },
-  resultName: {
-    color: "#FFFFFF",
+  statusMsg: {
+    color: "white",
+    marginTop: 20,
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "600"
   },
-  resultStatus: {
-    color: "rgba(255, 255, 255, 0.9)",
-    fontSize: 14,
-  },
-  scanButton: {
+  resultBadge: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: Spacing.md,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: BorderRadius.full,
-    gap: Spacing.sm,
+    gap: 8,
   },
-  scanButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
+  resultText: {
+    color: "white",
     fontSize: 16,
+    fontWeight: "600",
   },
+  footer: { width: "100%", paddingHorizontal: 40, alignItems: "center", marginBottom: 12 },
+  captureBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderRadius: 26,
+    gap: 12
+  },
+  btnText: { color: "white", fontWeight: "bold", fontSize: 16 },
+  permissionContainer: { padding: 30, alignItems: "center", backgroundColor: 'transparent' },
+  iconCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255, 75, 75, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  permissionTitle: { marginBottom: 12, textAlign: 'center' },
+  permissionText: { textAlign: 'center', color: '#666', marginBottom: 32, lineHeight: 22 },
+  requestBtn: { backgroundColor: Colors.light.primary, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 16, width: '100%', alignItems: 'center' },
+  cancelBtn: { marginTop: 20, padding: 10 },
+  cancelText: { color: '#666', fontWeight: '600' },
 });

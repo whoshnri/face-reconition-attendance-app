@@ -1,395 +1,252 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { View, StyleSheet, Pressable, Platform } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import { View, StyleSheet, Pressable, Animated } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withRepeat,
-  withSequence,
-  withTiming,
-  runOnJS,
-} from "react-native-reanimated";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
+
 import {
   Camera,
   useCameraDevice,
+  useFrameProcessor,
+  useCameraFormat,
   useCameraPermission,
 } from "react-native-vision-camera";
-import { useFaceDetection } from "@infinitered/react-native-mlkit-face-detection";
+import { useFaceDetector } from "react-native-vision-camera-face-detector";
+import { Worklets } from "react-native-worklets-core";
+import { useResizePlugin } from "vision-camera-resize-plugin";
+import { useTensorflowModel } from "react-native-fast-tflite";
+import { useSharedValue } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, Colors } from "@/constants/theme";
+import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useApp } from "@/store/AppContext";
-import { StudentsStackParamList } from "@/navigation/StudentsStackNavigator";
-import {
-  loadFaceModel,
-  isModelLoaded,
-  generateEmbeddingFromPhoto,
-} from "@/lib/faceRecognition";
 import { saveFaceEmbedding } from "@/lib/database";
+import { normalizeEmbedding, ensureArray } from "@/lib/faceRecognition";
+import { useTheme } from "@/hooks/useTheme";
+import { AnimatedPressable } from "@/components/AnimatedPressable";
 
-type NavigationProp = NativeStackNavigationProp<StudentsStackParamList>;
-type RouteType = RouteProp<StudentsStackParamList, "EnrollFace">;
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function EnrollFaceScreen() {
-  const navigation = useNavigation<NavigationProp>();
-  const route = useRoute<RouteType>();
-  const { theme } = useTheme();
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const { enrollFace } = useApp();
+  const student = route.params.student;
 
-  // Camera setup
+
+  // --- 1. SETTINGS & REFS ---
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("front");
-  const cameraRef = useRef<Camera>(null);
+  const format = useCameraFormat(device, [
+    { videoResolution: { width: 640, height: 480 } }, // Low res = High speed
+    { fps: 30 }
+  ]);
 
-  // Face detection for photos
-  const { detectFaces } = useFaceDetection();
+  const { resize } = useResizePlugin();
+  const tflite = useTensorflowModel(require("@/assets/models/mobilefacenet.tflite"));
+  const model = tflite.state === "loaded" ? tflite.model : undefined;
 
-  const [status, setStatus] = useState<
-    "loading" | "positioning" | "detecting" | "processing" | "success" | "error"
-  >("loading");
-  const [statusMessage, setStatusMessage] = useState("Loading model...");
-  const [faceDetected, setFaceDetected] = useState(false);
-
-  const student = route.params.student;
-  const pulseScale = useSharedValue(1);
-  const successScale = useSharedValue(0);
-  const borderColor = useSharedValue(0);
+  const vectorRef = useRef<Float32Array | null>(null);
   const isCapturing = useRef(false);
-  const stableFaceCount = useRef(0);
+  const frameCounter = useSharedValue(0);
 
-  // Load face recognition model on mount
-  useEffect(() => {
-    const initModel = async () => {
-      try {
-        if (!isModelLoaded()) {
-          await loadFaceModel();
-        }
-        setStatus("positioning");
-        setStatusMessage("Position face within frame");
-      } catch (error) {
-        console.error("Failed to load face model:", error);
-        setStatus("error");
-        setStatusMessage("Failed to load face recognition model");
-      }
-    };
-    initModel();
-  }, []);
+  // --- 2. STATE ---
+  const [status, setStatus] = useState<"loading" | "positioning" | "processing" | "success">("loading");
+  const [faceDetected, setFaceDetected] = useState(false);
+  const pulseScale = useRef(new Animated.Value(1)).current;
+
+  // --- 3. DETECTOR CONFIG ---
+  const { detectFaces } = useFaceDetector({
+    performanceMode: "fast",
+    classificationMode: "none",
+    landmarkMode: "none",
+  });
 
   useEffect(() => {
-    pulseScale.value = withRepeat(
-      withSequence(
-        withTiming(1.02, { duration: 1000 }),
-        withTiming(1, { duration: 1000 }),
-      ),
-      -1,
-      true,
-    );
-  }, []);
+    if (model) setStatus("positioning");
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseScale, { toValue: 1.05, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseScale, { toValue: 1, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [model]);
 
-  // Periodic face presence check using photo
+  // request camera permission
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    if (!hasPermission) requestPermission();
+  }, [hasPermission]);
 
-    if (status === "positioning" && cameraRef.current) {
-      interval = setInterval(async () => {
-        try {
-          const photo = await cameraRef.current?.takePhoto();
-          if (photo?.path) {
-            const result = await detectFaces(`file://${photo.path}`);
-            setFaceDetected((result?.faces?.length ?? 0) > 0);
-          }
-        } catch (e) {
-          // Silently handle errors
-        }
-      }, 500);
+  // --- 4. WORKLETS (The High Speed Part) ---
+  const syncFaceState = Worklets.createRunOnJS((isFound: boolean, vector: any) => {
+    if (faceDetected !== isFound) setFaceDetected(isFound);
+
+    // Robustly convert potentially serialized object to array
+    const cleanVector = normalizeEmbedding(ensureArray(vector));
+
+    if (cleanVector.length > 0) {
+      vectorRef.current = new Float32Array(cleanVector);
+      console.log(`[FaceEnroll] Face detected, embedding size: ${cleanVector.length}`);
+    } else {
+      vectorRef.current = null;
     }
+  });
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [status, detectFaces]);
+  const frameProcessor = useFrameProcessor((frame) => {
+    "worklet";
+    frameCounter.value += 1;
 
+    // Throttle: Process every 5th frame for performance
+    if (frameCounter.value % 5 !== 0) return;
 
-  const captureAndEnroll = async () => {
-    if (isCapturing.current || !cameraRef.current) return;
+    const faces = detectFaces(frame);
+
+    if (faces.length > 0 && model != null) {
+      const face = faces[0];
+
+      try {
+        // --- CRITICAL: Coordinate Clamping ---
+        // We ensure the crop never exceeds frame boundaries to prevent model errors
+        const x = Math.max(0, face.bounds.x);
+        const y = Math.max(0, face.bounds.y);
+        const width = Math.min(face.bounds.width, frame.width - x);
+        const height = Math.min(face.bounds.height, frame.height - y);
+
+        const resized = resize(frame, {
+          scale: { width: 112, height: 112 },
+          crop: { x, y, width, height },
+          pixelFormat: "rgb",
+          dataType: "float32",
+        });
+
+        const output = model.runSync([resized]);
+        if (output && output.length > 0) {
+          syncFaceState(true, output[0] as Float32Array);
+        } else {
+          syncFaceState(true, null);
+        }
+      } catch (e) {
+        syncFaceState(true, null);
+      }
+    } else {
+      syncFaceState(false, null);
+    }
+  }, [model, detectFaces]);
+
+  // --- 5. ACTION HANDLER ---
+  const onCapture = async () => {
+    if (isCapturing.current || !vectorRef.current) return;
+
     isCapturing.current = true;
-
-    setStatus("detecting");
-    setStatusMessage("Hold still...");
-    borderColor.value = withTiming(1, { duration: 500 });
+    setStatus("processing");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      // Take a photo
-      const photo = await cameraRef.current.takePhoto();
+      // Convert Float32Array to number array and normalize
+      const rawEmbedding = Array.from(vectorRef.current);
+      console.log(rawEmbedding)
 
-      // Detect face in the photo
-      const faceResult = await detectFaces(`file://${photo.path}`);
+      // Normalize the embedding before storage for accurate comparison
+      const normalizedEmbedding = normalizeEmbedding(rawEmbedding);
 
-      if (!faceResult?.faces?.length) {
-        setStatus("error");
-        setStatusMessage("No face detected. Please try again.");
-        isCapturing.current = false;
-        return;
-      }
-
-      setStatus("processing");
-      setStatusMessage("Processing face...");
-
-      // Get face bounds for cropping (ML Kit uses 'frame' property)
-      const face = faceResult.faces[0] as any;
-      const faceBounds = face?.frame ? {
-        x: face.frame.x,
-        y: face.frame.y,
-        width: face.frame.width,
-        height: face.frame.height,
-      } : undefined;
-
-      // Generate real embedding from the photo
-      const embedding = await generateEmbeddingFromPhoto(
-        `file://${photo.path}`,
-        faceBounds
-      );
-
-      // Save embedding to database
-      await saveFaceEmbedding(student.id, embedding);
-
-      // Mark student as enrolled in app context
+      await saveFaceEmbedding(student.id, normalizedEmbedding);
       await enrollFace(student.id);
 
       setStatus("success");
-      setStatusMessage("Face enrolled successfully!");
-      successScale.value = withSpring(1, { damping: 12, stiffness: 100 });
-
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
-      setTimeout(() => {
-        navigation.goBack();
-      }, 1500);
-    } catch (error) {
-      console.error("Enrollment failed:", error);
-      setStatus("error");
-      setStatusMessage("Enrollment failed. Please try again.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => navigation.goBack(), 1500);
+    } catch (err) {
+      console.error("Enrollment failed:", err);
+      setStatus("positioning");
       isCapturing.current = false;
     }
   };
 
-  const frameStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseScale.value }],
-    borderColor:
-      status === "success"
-        ? Colors.light.success
-        : faceDetected
-          ? Colors.light.primary
-          : "rgba(255, 255, 255, 0.6)",
-  }));
-
-  const successStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: successScale.value }],
-    opacity: successScale.value,
-  }));
-
+  // --- 6. RENDER ---
   if (!hasPermission) {
     return (
-      <ThemedView style={[styles.container, styles.permissionContainer]}>
-        <View style={styles.permissionContent}>
-          <View
-            style={[
-              styles.permissionIcon,
-              { backgroundColor: theme.backgroundSecondary },
-            ]}
-          >
-            <Feather name="camera-off" size={48} color={theme.textSecondary} />
+      <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
+        <ThemedView style={styles.permissionContainer}>
+          <View style={styles.iconCircle}>
+            <Feather name="camera-off" size={48} color={theme.error} />
           </View>
-          <ThemedText type="h3" style={styles.permissionTitle}>
-            Camera Access Required
-          </ThemedText>
-          <ThemedText
-            style={[styles.permissionText, { color: theme.textSecondary }]}
-          >
-            We need camera access to capture and enroll the student's face for
-            attendance recognition.
+          <ThemedText type="h2" style={styles.permissionTitle}>Camera Access Required</ThemedText>
+          <ThemedText style={styles.permissionText}>
+            We need camera access to enroll your face for attendance.
           </ThemedText>
           <AnimatedPressable
             onPress={requestPermission}
-            style={[
-              styles.permissionButton,
-              { backgroundColor: theme.primary },
-            ]}
+            style={styles.requestBtn}
           >
-            <Feather name="camera" size={20} color="#FFFFFF" />
-            <ThemedText style={styles.permissionButtonText}>
-              Enable Camera
-            </ThemedText>
+            <ThemedText style={styles.btnText}>Grant Permission</ThemedText>
           </AnimatedPressable>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={styles.cancelLink}
-          >
-            <ThemedText style={{ color: theme.textSecondary }}>
-              Cancel
-            </ThemedText>
+          <Pressable onPress={() => navigation.goBack()} style={styles.cancelBtn}>
+            <ThemedText style={styles.cancelText}>Cancel</ThemedText>
           </Pressable>
-        </View>
-      </ThemedView>
-    );
-  }
-
-  if (Platform.OS === "web") {
-    return (
-      <ThemedView style={[styles.container, styles.permissionContainer]}>
-        <View style={styles.permissionContent}>
-          <View
-            style={[
-              styles.permissionIcon,
-              { backgroundColor: theme.backgroundSecondary },
-            ]}
-          >
-            <Feather name="smartphone" size={48} color={theme.textSecondary} />
-          </View>
-          <ThemedText type="h3" style={styles.permissionTitle}>
-            Use Development Build
-          </ThemedText>
-          <ThemedText
-            style={[styles.permissionText, { color: theme.textSecondary }]}
-          >
-            Face enrollment requires native camera features. Please use the
-            development build on your Android device.
-          </ThemedText>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={styles.cancelLink}
-          >
-            <ThemedText style={{ color: theme.primary }}>Go Back</ThemedText>
-          </Pressable>
-        </View>
-      </ThemedView>
+        </ThemedView>
+      </SafeAreaView>
     );
   }
 
   if (!device) {
     return (
-      <ThemedView style={[styles.container, styles.permissionContainer]}>
-        <View style={styles.permissionContent}>
-          <Feather name="alert-circle" size={48} color={theme.error} />
-          <ThemedText type="h3" style={styles.permissionTitle}>
-            No Camera Found
-          </ThemedText>
-          <ThemedText
-            style={[styles.permissionText, { color: theme.textSecondary }]}
-          >
-            Unable to access the front camera on this device.
-          </ThemedText>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={styles.cancelLink}
-          >
-            <ThemedText style={{ color: theme.primary }}>Go Back</ThemedText>
-          </Pressable>
-        </View>
-      </ThemedView>
+      <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
+        <ThemedView style={styles.center}>
+          <ThemedText>Loading Camera...</ThemedText>
+        </ThemedView>
+      </SafeAreaView>
     );
   }
 
   return (
     <View style={styles.container}>
       <Camera
-        ref={cameraRef}
         style={StyleSheet.absoluteFill}
         device={device}
+        format={format}
+        fps={30}
         isActive={status !== "success"}
-        photo={true}
         pixelFormat="yuv"
+        frameProcessor={frameProcessor}
       />
 
-      <View style={[styles.overlay, StyleSheet.absoluteFill]}>
-        <View style={[styles.topBar, { paddingTop: insets.top + Spacing.md }]}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={({ pressed }) => [
-              styles.closeButton,
-              { opacity: pressed ? 0.7 : 1 },
+      <View style={[styles.overlay, { paddingTop: insets.top + 20 }]}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Feather name="x" size={28} color="white" />
+        </Pressable>
+
+        <View style={styles.guideContainer}>
+          <Animated.View
+            style={[
+              styles.faceMask,
+              {
+                transform: [{ scale: pulseScale }],
+                borderColor: faceDetected && vectorRef.current ? theme.primary : 'white'
+              }
+            ]}
+          />
+          <ThemedText style={styles.statusMsg}>
+            {status === "processing" ? "Enrolling..." :
+              (faceDetected && vectorRef.current) ? "Ready to Capture" :
+                faceDetected ? "Adjusting Face..." : "Align Face in Frame"}
+          </ThemedText>
+        </View>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 50 }]}>
+          <AnimatedPressable
+            disabled={!faceDetected || !vectorRef.current || status === "processing"}
+            onPress={onCapture}
+            style={[
+              styles.captureBtn,
+              { backgroundColor: (faceDetected && vectorRef.current) ? theme.primary : "#444" }
             ]}
           >
-            <Feather name="x" size={24} color="#FFFFFF" />
-          </Pressable>
-          <ThemedText style={styles.studentName}>{student.name}</ThemedText>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <View style={styles.frameContainer}>
-          <Animated.View style={[styles.faceFrame, frameStyle]}>
-            {status === "success" ? (
-              <Animated.View style={[styles.successCheck, successStyle]}>
-                <Feather name="check" size={64} color={Colors.light.success} />
-              </Animated.View>
-            ) : status === "processing" ? (
-              <View style={styles.processingIndicator}>
-                <Feather name="loader" size={32} color="#FFFFFF" />
-              </View>
-            ) : null}
-          </Animated.View>
-          <ThemedText style={styles.statusText}>{statusMessage}</ThemedText>
-          {faceDetected && status === "positioning" && (
-            <ThemedText style={styles.faceDetectedText}>
-              Face detected - Ready to capture
-            </ThemedText>
-          )}
-        </View>
-
-        <View
-          style={[
-            styles.bottomSection,
-            { paddingBottom: insets.bottom + Spacing.xl },
-          ]}
-        >
-          {status === "positioning" || status === "loading" ? (
-            <>
-              <View style={styles.tipsCard}>
-                <ThemedText style={styles.tipsTitle}>
-                  Tips for best results:
-                </ThemedText>
-                <ThemedText style={styles.tipText}>
-                  • Face the camera directly
-                </ThemedText>
-                <ThemedText style={styles.tipText}>
-                  • Ensure good lighting
-                </ThemedText>
-                <ThemedText style={styles.tipText}>
-                  • Remove glasses if possible
-                </ThemedText>
-              </View>
-              <AnimatedPressable
-                onPress={captureAndEnroll}
-                disabled={!faceDetected || status === "loading"}
-                style={[
-                  styles.captureButton,
-                  {
-                    backgroundColor:
-                      faceDetected && status !== "loading"
-                        ? theme.primary
-                        : theme.textDisabled,
-                  },
-                ]}
-              >
-                <Feather name="camera" size={24} color="#FFFFFF" />
-                <ThemedText style={styles.captureButtonText}>
-                  {status === "loading" ? "Loading..." : "Capture Face"}
-                </ThemedText>
-              </AnimatedPressable>
-            </>
-          ) : null}
+            <Feather name="user-check" size={24} color="white" />
+            <ThemedText style={styles.btnText}>Enroll Face</ThemedText>
+          </AnimatedPressable>
         </View>
       </View>
     </View>
@@ -397,141 +254,30 @@ export default function EnrollFaceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  permissionContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  permissionContent: {
-    alignItems: "center",
-    paddingHorizontal: Spacing.xl,
-  },
-  permissionIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.lg,
-  },
-  permissionTitle: {
-    textAlign: "center",
-    marginBottom: Spacing.sm,
-  },
-  permissionText: {
-    textAlign: "center",
-    marginBottom: Spacing.xl,
-  },
-  permissionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.full,
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  permissionButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  cancelLink: {
-    padding: Spacing.md,
-  },
-  overlay: {
-    justifyContent: "space-between",
-  },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.md,
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    borderRadius: 20,
-  },
-  studentName: {
-    color: "#FFFFFF",
-    fontSize: 17,
-    fontWeight: "600",
-  },
-  frameContainer: {
-    alignItems: "center",
-    gap: Spacing.lg,
-  },
-  faceFrame: {
+  container: { flex: 1, backgroundColor: "black" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  overlay: { flex: 1, justifyContent: "space-between", alignItems: "center" },
+  backBtn: { alignSelf: "flex-start", marginLeft: 20, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
+  guideContainer: { alignItems: "center" },
+  faceMask: {
     width: 250,
     height: 320,
     borderWidth: 3,
-    borderRadius: BorderRadius.xl,
-    alignItems: "center",
-    justifyContent: "center",
+    borderRadius: 125,
+    borderStyle: "dashed",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
-  successCheck: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "rgba(16, 185, 129, 0.2)",
-    alignItems: "center",
-    justifyContent: "center",
+  statusMsg: { color: "white", marginTop: 20, fontSize: 18, fontWeight: "600" },
+  footer: {
+    width: "100%", paddingHorizontal: 40, alignItems: "center", marginBottom: 30
   },
-  processingIndicator: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statusText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  faceDetectedText: {
-    color: Colors.light.success,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  bottomSection: {
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.md,
-  },
-  tipsCard: {
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    gap: Spacing.xs,
-  },
-  tipsTitle: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    marginBottom: Spacing.xs,
-  },
-  tipText: {
-    color: "rgba(255, 255, 255, 0.8)",
-    fontSize: 14,
-  },
-  captureButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.full,
-    gap: Spacing.sm,
-  },
-  captureButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 16,
-  },
+  captureBtn: { flexDirection: "row", alignItems: "center", paddingHorizontal: 40, paddingVertical: 18, borderRadius: 35, gap: 12 },
+  btnText: { color: "white", fontWeight: "bold", fontSize: 16 },
+  permissionContainer: { padding: 30, alignItems: "center", backgroundColor: 'transparent' },
+  iconCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255, 75, 75, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  permissionTitle: { marginBottom: 12, textAlign: 'center' },
+  permissionText: { textAlign: 'center', color: '#666', marginBottom: 32, lineHeight: 22 },
+  requestBtn: { backgroundColor: Colors.light.primary, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 16, width: '100%', alignItems: 'center' },
+  cancelBtn: { marginTop: 20, padding: 10 },
+  cancelText: { color: '#666', fontWeight: '600' },
 });

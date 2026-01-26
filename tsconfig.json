@@ -5,7 +5,7 @@
     "paths": {
       "@/*": ["./*"]
     },
-  "jsx": "react-native"
+    "jsx": "react-native"
   },
-  "include": ["**/*.ts", "**/*.tsx", "**/*.jsx"],
+  "include": ["**/*.ts", "**/*.tsx", "**/*.jsx", "nativewind-env.d.ts"]
 }

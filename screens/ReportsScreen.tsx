@@ -1,15 +1,12 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, FlatList } from "react-native";
+import { View, StyleSheet, Pressable, FlatList, Animated } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+import { AnimatedPressable } from "@/components/AnimatedPressable";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -19,8 +16,6 @@ import { useApp, AttendanceSession } from "@/store/AppContext";
 import { ReportsStackParamList } from "@/navigation/ReportsStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<ReportsStackParamList>;
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type DateFilter = "week" | "month" | "all";
 
@@ -66,11 +61,6 @@ function SessionCard({
   onPress: () => void;
 }) {
   const { theme } = useTheme();
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
 
   const attendanceRate =
     session.totalCount > 0
@@ -80,16 +70,9 @@ function SessionCard({
   return (
     <AnimatedPressable
       onPress={onPress}
-      onPressIn={() => {
-        scale.value = withSpring(0.98, { damping: 15, stiffness: 150 });
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, { damping: 15, stiffness: 150 });
-      }}
       style={[
         styles.sessionCard,
         { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
-        animatedStyle,
       ]}
     >
       <View style={styles.sessionHeader}>
@@ -185,8 +168,9 @@ export default function ReportsScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <ThemedView style={styles.innerContainer}>
+        <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
         <View style={styles.filterRow}>
           <FilterButton
             label="This Week"
@@ -263,13 +247,17 @@ export default function ReportsScreen() {
             showsVerticalScrollIndicator={false}
           />
         )}
-      </View>
-    </ThemedView>
+        </View>
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  innerContainer: {
     flex: 1,
   },
   content: {

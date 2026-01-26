@@ -1,16 +1,14 @@
-import React from "react";
-import { View, StyleSheet, Pressable } from "react-native";
+import React, { useRef } from "react";
+import { View, StyleSheet, Pressable, Animated } from "react-native";
+import { AnimatedPressable } from "@/components/AnimatedPressable";
+import { ScreenScrollView } from "@/components/ScreenScrollView";
+
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+
 
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -21,7 +19,6 @@ import { AttendanceStackParamList } from "@/navigation/AttendanceStackNavigator"
 
 type NavigationProp = NativeStackNavigationProp<AttendanceStackParamList>;
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function StatCard({
   icon,
@@ -56,28 +53,12 @@ function StatCard({
   );
 }
 
-function RecentAttendanceItem({ name, time }: { name: string; time: string }) {
-  const { theme } = useTheme();
-
-  return (
-    <View style={styles.recentItem}>
-      <View
-        style={[styles.recentDot, { backgroundColor: Colors.light.success }]}
-      />
-      <ThemedText style={styles.recentName}>{name}</ThemedText>
-      <ThemedText style={[styles.recentTime, { color: theme.textSecondary }]}>
-        {time}
-      </ThemedText>
-    </View>
-  );
-}
 
 export default function AttendanceHomeScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { theme } = useTheme();
-  const { students, sessions, getTodayAttendance, startSession } = useApp();
+  const { students, sessions, getTodayAttendance } = useApp();
   const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
 
   const todayAttendance = getTodayAttendance();
@@ -89,29 +70,23 @@ export default function AttendanceHomeScreen() {
     year: "numeric",
   });
 
-  const fabScale = useSharedValue(1);
+  const fabScale = useRef(new Animated.Value(1)).current;
 
-  const fabStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: fabScale.value }],
-  }));
+  const fabStyle = {
+    transform: [{ scale: fabScale }],
+  };
 
-  const handleStartSession = async () => {
-    if (enrolledCount === 0) {
-      return;
-    }
-    const sessionId = await startSession();
-    navigation.navigate("AttendanceScanner", { sessionId });
+
+  const handleCreateSession = () => {
+    navigation.navigate("CreateSession");
   };
 
   return (
     <ThemedView style={styles.container}>
-      <View
-        style={[
+      <ScreenScrollView
+        contentContainerStyle={[
           styles.content,
-          {
-            paddingTop: headerHeight + Spacing.md,
-            paddingBottom: tabBarHeight + 100,
-          },
+          { paddingBottom: tabBarHeight + 100 },
         ]}
       >
         <View
@@ -153,29 +128,43 @@ export default function AttendanceHomeScreen() {
             icon="clock"
             value={sessions.length}
             label="Total Sessions"
-            color={Colors.light.primary}
+            color={theme.primary}
           />
         </View>
 
-        {todayAttendance.length > 0 ? (
-          <View
-            style={[
-              styles.recentCard,
-              {
-                backgroundColor: theme.backgroundDefault,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <ThemedText type="h4" style={styles.recentTitle}>
-              Recent Attendance
-            </ThemedText>
-            {todayAttendance.slice(0, 5).map((record, index) => (
-              <RecentAttendanceItem
-                key={`${record.studentId}-${index}`}
-                name={record.name}
-                time={record.timestamp}
-              />
+        <View style={styles.sectionHeader}>
+          <ThemedText type="h4">Recent Sessions</ThemedText>
+          {/* <AnimatedPressable onPress={() => navigation.navigate('Reports' as any)}>
+            <ThemedText style={{ color: theme.primary, fontSize: 14 }}>View All</ThemedText>
+          </AnimatedPressable> */}
+        </View>
+
+        {sessions.length > 0 ? (
+          <View style={styles.sessionList}>
+            {sessions.slice(0, 5).map((session) => (
+              <AnimatedPressable
+                key={session.id}
+                onPress={() => navigation.navigate('SessionDetail', { session } as any)}
+                style={[
+                  styles.sessionCard,
+                  { backgroundColor: theme.backgroundDefault, borderColor: theme.border },
+                ]}
+              >
+                <View style={styles.sessionHeader}>
+                  <View>
+                    <ThemedText type="h4" style={{ fontSize: 16 }}>{session.date}</ThemedText>
+                    <ThemedText style={[styles.sessionTime, { color: theme.textSecondary }]}>
+                      {session.time}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.sessionRight}>
+                    <ThemedText style={[styles.sessionCount, { color: theme.primary }]}>
+                      {session.presentCount}/{session.totalCount}
+                    </ThemedText>
+                    <Feather name="chevron-right" size={20} color={theme.textDisabled} />
+                  </View>
+                </View>
+              </AnimatedPressable>
             ))}
           </View>
         ) : (
@@ -192,38 +181,42 @@ export default function AttendanceHomeScreen() {
             <ThemedText
               style={[styles.emptyText, { color: theme.textSecondary }]}
             >
-              No attendance recorded today
+              No sessions created yet
             </ThemedText>
             <ThemedText
               style={[styles.emptySubtext, { color: theme.textDisabled }]}
             >
-              Tap the camera button to start a session
+              Tap the + button to create your first session
             </ThemedText>
           </View>
         )}
-      </View>
+      </ScreenScrollView>
 
       <AnimatedPressable
-        onPress={handleStartSession}
+        onPress={handleCreateSession}
         onPressIn={() => {
-          fabScale.value = withSpring(0.95, { damping: 15, stiffness: 150 });
+          Animated.spring(fabScale, {
+            toValue: 0.95,
+            useNativeDriver: true,
+          }).start();
         }}
         onPressOut={() => {
-          fabScale.value = withSpring(1, { damping: 15, stiffness: 150 });
+          Animated.spring(fabScale, {
+            toValue: 1,
+            useNativeDriver: true,
+          }).start();
         }}
-        disabled={enrolledCount === 0}
         style={[
           styles.fab,
           {
-            backgroundColor:
-              enrolledCount === 0 ? theme.textDisabled : theme.secondary,
+            backgroundColor: theme.primary,
             bottom: tabBarHeight + Spacing.xl,
             ...Shadows.fab,
           },
           fabStyle,
         ]}
       >
-        <Feather name="camera" size={28} color="#FFFFFF" />
+        <Feather name="plus" size={28} color="#FFFFFF" />
       </AnimatedPressable>
     </ThemedView>
   );
@@ -234,8 +227,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
     paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
   },
   dateCard: {
     flexDirection: "row",
@@ -283,27 +276,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     borderWidth: 1,
   },
-  recentTitle: {
-    marginBottom: Spacing.md,
-  },
-  recentItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: Spacing.sm,
-  },
-  recentDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: Spacing.sm,
-  },
-  recentName: {
-    flex: 1,
-    fontSize: 15,
-  },
-  recentTime: {
-    fontSize: 14,
-  },
   emptyCard: {
     padding: Spacing.xl,
     borderRadius: BorderRadius.md,
@@ -319,6 +291,39 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 13,
     textAlign: "center",
+  },
+  sessionList: {
+    gap: Spacing.sm,
+  },
+  sessionCard: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  sessionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  sessionTime: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  sessionRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  sessionCount: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   fab: {
     position: "absolute",

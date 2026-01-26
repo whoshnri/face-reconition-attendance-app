@@ -33,6 +33,7 @@ export default function MainTabNavigator() {
           }),
           borderTopWidth: 0,
           elevation: 0,
+          marginBottom : 5
         },
         tabBarBackground: () =>
           Platform.OS === "ios" ? (

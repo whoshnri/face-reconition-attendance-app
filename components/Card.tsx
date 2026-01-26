@@ -1,11 +1,5 @@
 import React from "react";
-import { StyleSheet, Pressable } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  WithSpringConfig,
-} from "react-native-reanimated";
+import { StyleSheet, Pressable, Animated } from "react-native";
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
@@ -16,12 +10,11 @@ interface CardProps {
   onPress?: () => void;
 }
 
-const springConfig: WithSpringConfig = {
+const springConfig = {
   damping: 15,
   mass: 0.3,
   stiffness: 150,
-  overshootClamping: true,
-  energyThreshold: 0.001,
+  useNativeDriver: true,
 };
 
 const getBackgroundColorForElevation = (
@@ -44,20 +37,22 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function Card({ elevation, onPress }: CardProps) {
   const { theme } = useTheme();
-  const scale = useSharedValue(1);
+  const scale = React.useRef(new Animated.Value(1)).current;
 
   const cardBackgroundColor = getBackgroundColorForElevation(elevation, theme);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
   const handlePressIn = () => {
-    scale.value = withSpring(0.98, springConfig);
+    Animated.spring(scale, {
+      toValue: 0.98,
+      ...springConfig,
+    }).start();
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, springConfig);
+    Animated.spring(scale, {
+      toValue: 1,
+      ...springConfig,
+    }).start();
   };
 
   return (
@@ -69,8 +64,8 @@ export function Card({ elevation, onPress }: CardProps) {
         styles.card,
         {
           backgroundColor: cardBackgroundColor,
+          transform: [{ scale }],
         },
-        animatedStyle,
       ]}
     >
       <ThemedText type="h4" style={styles.cardTitle}>

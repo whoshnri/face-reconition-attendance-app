@@ -1,13 +1,9 @@
 import React from "react";
-import { View, StyleSheet, Pressable, Alert } from "react-native";
+import { View, StyleSheet, Pressable, Alert, Animated } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+import { AnimatedPressable } from "@/components/AnimatedPressable";
 
 import { ScreenScrollView } from "@/components/ScreenScrollView";
 import { ThemedText } from "@/components/ThemedText";
@@ -18,8 +14,6 @@ import { StudentsStackParamList } from "@/navigation/StudentsStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<StudentsStackParamList>;
 type RouteType = RouteProp<StudentsStackParamList, "StudentDetail">;
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 function ActionButton({
   icon,
@@ -33,11 +27,6 @@ function ActionButton({
   variant?: "default" | "destructive" | "primary";
 }) {
   const { theme } = useTheme();
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
 
   const getBgColor = () => {
     switch (variant) {
@@ -64,12 +53,6 @@ function ActionButton({
   return (
     <AnimatedPressable
       onPress={onPress}
-      onPressIn={() => {
-        scale.value = withSpring(0.98, { damping: 15, stiffness: 150 });
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, { damping: 15, stiffness: 150 });
-      }}
       style={[
         styles.actionButton,
         {
@@ -77,7 +60,6 @@ function ActionButton({
           borderColor: variant === "default" ? theme.border : "transparent",
           borderWidth: variant === "default" ? 1 : 0,
         },
-        animatedStyle,
       ]}
     >
       <Feather name={icon} size={20} color={getTextColor()} />
@@ -145,6 +127,7 @@ export default function StudentDetailScreen() {
           style={[
             styles.largeAvatar,
             {
+              marginTop: 90,
               backgroundColor: isDark
                 ? Colors.dark.backgroundSecondary
                 : Colors.light.backgroundSecondary,
