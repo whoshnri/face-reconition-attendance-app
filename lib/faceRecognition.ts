@@ -36,7 +36,7 @@ const MODEL_PATH = require("../assets/models/mobilefacenet.tflite");
 
 export const EMBEDDING_SIZE = 128;
 
-export const SIMILARITY_THRESHOLD = 0.6;
+export const SIMILARITY_THRESHOLD = 0.80;
 
 // ============================================================================
 // MODEL STATE - We keep track of whether the AI model is loaded
@@ -224,36 +224,37 @@ export function findBestMatch(
 
   let bestMatch: { studentId: string; similarity: number } | null = null;
 
-  console.log(bestMatch)
-
   // Compare against each enrolled student
   for (const stored of storedEmbeddings) {
     const similarity = cosineSimilarity(liveArr, stored.embedding);
-    console.log("im here")
-
 
     console.log(
       `[FaceRecognition] Comparing vs ${stored.studentId}: ${(similarity * 100).toFixed(1)}%`,
     );
 
-    // Only consider it a match if similarity is above our threshold
-    if (similarity >= SIMILARITY_THRESHOLD) {
-      // Keep track of the BEST match (highest similarity)
-      if (!bestMatch || similarity > bestMatch.similarity) {
-        bestMatch = { studentId: stored.studentId, similarity };
-      }
+    // Keep track of the BEST match (highest similarity) across ALL images
+    if (!bestMatch || similarity > bestMatch.similarity) {
+      bestMatch = { studentId: stored.studentId, similarity };
     }
   }
 
-
-  if (bestMatch) {
+  // After checking all, only return if the best match meets the threshold
+  if (bestMatch && bestMatch.similarity >= SIMILARITY_THRESHOLD) {
     console.log(
       `[FaceRecognition] ✅ Best match: ${bestMatch.studentId} (${(bestMatch.similarity * 100).toFixed(1)}%)`,
     );
-  } else {
-    console.log("[FaceRecognition] ❌ No match found above threshold");
+    return bestMatch;
   }
-  return bestMatch;
+
+  if (bestMatch) {
+    console.log(
+      `[FaceRecognition] ❌ Highest match (${(bestMatch.similarity * 100).toFixed(1)}%) below threshold (${(SIMILARITY_THRESHOLD * 100).toFixed(0)}%)`,
+    );
+  } else {
+    console.log("[FaceRecognition] ❌ No match found during comparison");
+  }
+
+  return null;
 }
 
 
