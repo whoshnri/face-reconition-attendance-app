@@ -3,7 +3,6 @@ import {
   View,
   Pressable,
   FlatList,
-  Share,
   Alert,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -11,12 +10,15 @@ import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-
+import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
+import * as XLSX from "xlsx";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { useApp } from "@/store/AppContext";
 import { ReportsStackParamList } from "@/navigation/ReportsStackNavigator";
 import { AnimatedPressable } from "@/components/AnimatedPressable";
+
 
 type RouteType = RouteProp<ReportsStackParamList, "SessionDetail">;
 
@@ -112,25 +114,84 @@ export default function SessionDetailScreen() {
   ];
 
   const handleExport = async () => {
-    const lines = [
-      `Attendance Report - ${session.date}`,
-      `Time: ${session.time}`,
-      `Present: ${session.presentCount}/${session.totalCount} (${attendanceRate}%)`,
-      "",
-      "Present Students:",
-      ...session.attendees.map((a) => `- ${a.name} (${a.timestamp})`),
-      "",
-      "Absent Students:",
-      ...absentStudents.map((s) => `- ${s.name}`),
-    ];
-
     try {
-      await Share.share({
-        message: lines.join("\n"),
-        title: `Attendance - ${session.date}`,
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new();
+
+      // Create summary sheet
+      const summaryData = [
+        ["Attendance Report"],
+        ["Session Date", session.date],
+        ["Session Time", session.time],
+        ["Present Count", session.presentCount],
+        ["Total Count", session.totalCount],
+        ["Attendance Rate", `${attendanceRate}%`],
+        [""], // Empty row
+        ["Present Students", session.attendees.length],
+        ["Absent Students", absentStudents.length],
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
+
+      // Create attendance details sheet
+      const attendanceData = [
+        ["Student ID", "Student Name", "Status", "Marked At"],
+        ...session.attendees.map((a) => [
+          a.studentId,
+          a.name,
+          "Present",
+          a.timestamp,
+        ]),
+        ...absentStudents.map((s) => [
+          s.id,
+          s.name,
+          "Absent",
+          "-",
+        ]),
+      ];
+      const attendanceSheet = XLSX.utils.aoa_to_sheet(attendanceData);
+
+      // Set column widths for better readability
+      attendanceSheet["!cols"] = [
+        { wch: 15 }, // Student ID
+        { wch: 25 }, // Student Name
+        { wch: 12 }, // Status
+        { wch: 20 }, // Marked At
+      ];
+
+      XLSX.utils.book_append_sheet(workbook, attendanceSheet, "Attendance");
+
+      // Generate Excel file buffer
+      const wbout = XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
+
+      // Create file path
+      const fileName = `Attendance_${session.date.replace(/\s+/g, "_")}_${session.time.replace(/[: ]/g, "_")}.xlsx`;
+      const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+
+      // Write file
+      await FileSystem.writeAsStringAsync(fileUri, wbout, {
+        encoding: FileSystem.EncodingType.Base64,
       });
+
+      // Share file
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          dialogTitle: `Export Attendance - ${session.date}`,
+        });
+      } else {
+        Alert.alert(
+          "Sharing not available",
+          "File sharing is not available on this device."
+        );
+      }
     } catch (error) {
-      console.log("Error sharing:", error);
+      console.error("Error exporting Excel file:", error);
+      Alert.alert(
+        "Export Failed",
+        "There was an error exporting the attendance report. Please try again."
+      );
     }
   };
 
@@ -284,7 +345,7 @@ export default function SessionDetailScreen() {
     z-10
   `}
           style={{
-            bottom: insets.bottom + 70,  
+            bottom: insets.bottom + 70,
             paddingBottom: insets.bottom > 0 ? 8 : 16,
           }}
         >

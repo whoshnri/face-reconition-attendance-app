@@ -36,7 +36,8 @@ const MODEL_PATH = require("../assets/models/mobilefacenet.tflite");
 
 export const EMBEDDING_SIZE = 128;
 
-export const SIMILARITY_THRESHOLD = 0.80;
+export const DISTANCE_THRESHOLD = 0.40;
+const MIN_CONFIDENCE_GAP = 0.05;
 
 // ============================================================================
 // MODEL STATE - We keep track of whether the AI model is loaded
@@ -47,6 +48,7 @@ export const SIMILARITY_THRESHOLD = 0.80;
  * It's null until we call loadFaceModel()
  */
 let model: TensorflowModel | null = null;
+
 
 // ============================================================================
 // MAIN FUNCTIONS - These are the ones you'll use in your app
@@ -173,7 +175,7 @@ export function cosineSimilarity(
 
   // Calculate the dot product and norms
   // (This is the math formula for cosine similarity)
-  let dotProduct = 0; // Sum of (a[i] * b[i])
+  let dotProduct = 0; // Sum of (a[i] * b[i]) 
   let norm1 = 0; // Sum of (a[i] * a[i])
   let norm2 = 0; // Sum of (b[i] * b[i])
 
@@ -206,11 +208,30 @@ export function cosineSimilarity(
  *     console.log(`Found ${match.studentId} with ${match.similarity * 100}% confidence`);
  *   }
  */
+
+
+
+export function euclideanDistance(
+  embedding1: number[],
+  embedding2: number[],
+): number {
+  if (embedding1.length !== embedding2.length) {
+    return Infinity;
+  }
+
+  let sum = 0;
+  for (let i = 0; i < embedding1.length; i++) {
+    const diff = embedding1[i] - embedding2[i];
+    sum += diff * diff;
+  }
+  
+  return Math.sqrt(sum);
+}
+
 export function findBestMatch(
   liveEmbedding: number[] | any,
   storedEmbeddings: Array<{ studentId: string; embedding: number[] }>,
-): { studentId: string; similarity: number } | null {
-  // If there are no enrolled students, we can't match anyone
+): { studentId: string; distance: number } | null {
   if (storedEmbeddings.length === 0) {
     console.log("[FaceRecognition] No stored embeddings to compare against");
     return null;
@@ -222,40 +243,55 @@ export function findBestMatch(
     return null;
   }
 
-  let bestMatch: { studentId: string; similarity: number } | null = null;
+  let bestMatch: { studentId: string; distance: number } | null = null;
+  let secondBest: { studentId: string; distance: number } | null = null;
 
-  // Compare against each enrolled student
   for (const stored of storedEmbeddings) {
-    const similarity = cosineSimilarity(liveArr, stored.embedding);
+    const distance = euclideanDistance(liveArr, stored.embedding);
 
     console.log(
-      `[FaceRecognition] Comparing vs ${stored.studentId}: ${(similarity * 100).toFixed(1)}%`,
+      `[FaceRecognition] Distance to ${stored.studentId}: ${distance.toFixed(3)}`,
     );
 
-    // Keep track of the BEST match (highest similarity) across ALL images
-    if (!bestMatch || similarity > bestMatch.similarity) {
-      bestMatch = { studentId: stored.studentId, similarity };
+    // Lower distance = better match
+    if (!bestMatch || distance < bestMatch.distance) {
+      secondBest = bestMatch;
+      bestMatch = { studentId: stored.studentId, distance };
+    } else if (!secondBest || distance < secondBest.distance) {
+      secondBest = { studentId: stored.studentId, distance };
     }
   }
 
-  // After checking all, only return if the best match meets the threshold
-  if (bestMatch && bestMatch.similarity >= SIMILARITY_THRESHOLD) {
-    console.log(
-      `[FaceRecognition] ✅ Best match: ${bestMatch.studentId} (${(bestMatch.similarity * 100).toFixed(1)}%)`,
-    );
-    return bestMatch;
+  
+  if (!bestMatch || bestMatch.distance > DISTANCE_THRESHOLD) {
+    if (bestMatch) {
+      console.log(
+        `[FaceRecognition] ❌ Lowest distance ${bestMatch.distance.toFixed(3)} above threshold ${DISTANCE_THRESHOLD}`,
+      );
+    }
+    return null;
   }
 
-  if (bestMatch) {
+  // Check confidence gap
+  const MIN_DISTANCE_GAP = 0.1; // Adjust: 0.05-0.15
+  
+  if (secondBest) {
+    const gap = secondBest.distance - bestMatch.distance;
     console.log(
-      `[FaceRecognition] ❌ Highest match (${(bestMatch.similarity * 100).toFixed(1)}%) below threshold (${(SIMILARITY_THRESHOLD * 100).toFixed(0)}%)`,
+      `[FaceRecognition] Gap: ${gap.toFixed(3)} ` +
+      `(${bestMatch.studentId}: ${bestMatch.distance.toFixed(3)} vs ${secondBest.studentId}: ${secondBest.distance.toFixed(3)})`
     );
-  } else {
-    console.log("[FaceRecognition] ❌ No match found during comparison");
+    
+    if (gap < MIN_DISTANCE_GAP) {
+      console.log(
+        `[FaceRecognition] ❌ Too close to call - gap ${gap.toFixed(3)} < ${MIN_DISTANCE_GAP}`,
+      );
+      return null;
+    }
   }
 
-  return null;
+  console.log(
+    `[FaceRecognition] ✅ Best match: ${bestMatch.studentId} (distance: ${bestMatch.distance.toFixed(3)})`,
+  );
+  return bestMatch;
 }
-
-
-
