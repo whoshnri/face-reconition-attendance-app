@@ -36,8 +36,8 @@ const MODEL_PATH = require("../assets/models/mobilefacenet.tflite");
 
 export const EMBEDDING_SIZE = 128;
 
-export const DISTANCE_THRESHOLD = 0.40;
-const MIN_CONFIDENCE_GAP = 0.05;
+export const SIMILARITY_THRESHOLD = 0.7;
+const MIN_SIMILARITY_GAP = 0.08;
 
 // ============================================================================
 // MODEL STATE - We keep track of whether the AI model is loaded
@@ -66,12 +66,20 @@ export function ensureArray(input: any): number[] {
   if (!input) return [];
   if (Array.isArray(input)) return input;
   if (input instanceof Float32Array) return Array.from(input);
+  if (ArrayBuffer.isView(input)) {
+    if (input instanceof DataView) {
+      return Array.from(
+        new Uint8Array(input.buffer, input.byteOffset, input.byteLength),
+      );
+    }
+    return Array.from(input as unknown as Iterable<number>);
+  }
 
   // Handle case where input is an object with numeric keys like {"0": 1.2, "1": 3.4 ...}
   const result: number[] = [];
   let i = 0;
   // MobileFaceNet output is always 128 floats
-  while (input[i] !== undefined && i < 128) {
+  while (input[i] !== undefined && i < EMBEDDING_SIZE) {
     result.push(Number(input[i]));
     i++;
   }
@@ -132,18 +140,21 @@ export function isModelLoaded(): boolean {
 export function normalizeEmbedding(
   embedding: number[] | Float32Array,
 ): number[] {
+  const arr = ensureArray(embedding);
+  if (arr.length === 0) return [];
+
   // Calculate L2 norm
   let norm = 0;
-  for (let i = 0; i < embedding.length; i++) {
-    norm += embedding[i] * embedding[i];
+  for (let i = 0; i < arr.length; i++) {
+    norm += arr[i] * arr[i];
   }
   norm = Math.sqrt(norm);
 
   // Normalize: divide each component by the norm
-  if (norm === 0) return Array.from(embedding); // Return as-is if zero vector
+  if (norm === 0) return new Array(arr.length).fill(0);
   const normalized: number[] = [];
-  for (let i = 0; i < embedding.length; i++) {
-    normalized.push(embedding[i] / norm);
+  for (let i = 0; i < arr.length; i++) {
+    normalized.push(arr[i] / norm);
   }
   return normalized;
 }
@@ -169,7 +180,7 @@ export function cosineSimilarity(
   const b_arr = ensureArray(embedding2);
 
   // Make sure both embeddings have the same size
-  if (a_arr.length !== b_arr.length) {
+  if (a_arr.length === 0 || a_arr.length !== b_arr.length) {
     return 0;
   }
 
@@ -211,27 +222,10 @@ export function cosineSimilarity(
 
 
 
-export function euclideanDistance(
-  embedding1: number[],
-  embedding2: number[],
-): number {
-  if (embedding1.length !== embedding2.length) {
-    return Infinity;
-  }
-
-  let sum = 0;
-  for (let i = 0; i < embedding1.length; i++) {
-    const diff = embedding1[i] - embedding2[i];
-    sum += diff * diff;
-  }
-  
-  return Math.sqrt(sum);
-}
-
 export function findBestMatch(
   liveEmbedding: number[] | any,
   storedEmbeddings: Array<{ studentId: string; embedding: number[] }>,
-): { studentId: string; distance: number } | null {
+): { studentId: string; similarity: number } | null {
   if (storedEmbeddings.length === 0) {
     console.log("[FaceRecognition] No stored embeddings to compare against");
     return null;
@@ -243,55 +237,57 @@ export function findBestMatch(
     return null;
   }
 
-  let bestMatch: { studentId: string; distance: number } | null = null;
-  let secondBest: { studentId: string; distance: number } | null = null;
+  let bestMatch: { studentId: string; similarity: number } | null = null;
+  let secondBest: { studentId: string; similarity: number } | null = null;
 
   for (const stored of storedEmbeddings) {
-    const distance = euclideanDistance(liveArr, stored.embedding);
+    const storedArr = ensureArray(stored.embedding);
+    if (storedArr.length !== liveArr.length) {
+      continue;
+    }
+
+    const similarity = cosineSimilarity(liveArr, storedArr);
 
     console.log(
-      `[FaceRecognition] Distance to ${stored.studentId}: ${distance.toFixed(3)}`,
+      `[FaceRecognition] Similarity to ${stored.studentId}: ${similarity.toFixed(3)}`,
     );
 
-    // Lower distance = better match
-    if (!bestMatch || distance < bestMatch.distance) {
+    // Higher similarity = better match
+    if (!bestMatch || similarity > bestMatch.similarity) {
       secondBest = bestMatch;
-      bestMatch = { studentId: stored.studentId, distance };
-    } else if (!secondBest || distance < secondBest.distance) {
-      secondBest = { studentId: stored.studentId, distance };
+      bestMatch = { studentId: stored.studentId, similarity };
+    } else if (!secondBest || similarity > secondBest.similarity) {
+      secondBest = { studentId: stored.studentId, similarity };
     }
   }
 
-  
-  if (!bestMatch || bestMatch.distance > DISTANCE_THRESHOLD) {
+  if (!bestMatch || bestMatch.similarity < SIMILARITY_THRESHOLD) {
     if (bestMatch) {
       console.log(
-        `[FaceRecognition] ❌ Lowest distance ${bestMatch.distance.toFixed(3)} above threshold ${DISTANCE_THRESHOLD}`,
+        `[FaceRecognition] ❌ Best similarity ${bestMatch.similarity.toFixed(3)} below threshold ${SIMILARITY_THRESHOLD}`,
       );
     }
     return null;
   }
 
   // Check confidence gap
-  const MIN_DISTANCE_GAP = 0.1; // Adjust: 0.05-0.15
-  
   if (secondBest) {
-    const gap = secondBest.distance - bestMatch.distance;
+    const gap = bestMatch.similarity - secondBest.similarity;
     console.log(
       `[FaceRecognition] Gap: ${gap.toFixed(3)} ` +
-      `(${bestMatch.studentId}: ${bestMatch.distance.toFixed(3)} vs ${secondBest.studentId}: ${secondBest.distance.toFixed(3)})`
+      `(${bestMatch.studentId}: ${bestMatch.similarity.toFixed(3)} vs ${secondBest.studentId}: ${secondBest.similarity.toFixed(3)})`
     );
     
-    if (gap < MIN_DISTANCE_GAP) {
+    if (gap < MIN_SIMILARITY_GAP) {
       console.log(
-        `[FaceRecognition] ❌ Too close to call - gap ${gap.toFixed(3)} < ${MIN_DISTANCE_GAP}`,
+        `[FaceRecognition] ❌ Too close to call - gap ${gap.toFixed(3)} < ${MIN_SIMILARITY_GAP}`,
       );
       return null;
     }
   }
 
   console.log(
-    `[FaceRecognition] ✅ Best match: ${bestMatch.studentId} (distance: ${bestMatch.distance.toFixed(3)})`,
+    `[FaceRecognition] ✅ Best match: ${bestMatch.studentId} (similarity: ${bestMatch.similarity.toFixed(3)})`,
   );
   return bestMatch;
 }

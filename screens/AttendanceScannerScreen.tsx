@@ -39,6 +39,15 @@ type RecognitionResult = {
   name?: string;
 };
 
+type CropMeta = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  frameWidth: number;
+  frameHeight: number;
+};
+
 export default function AttendanceScannerScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteType>();
@@ -67,6 +76,7 @@ export default function AttendanceScannerScreen() {
   const vectorRef = useRef<Float32Array | null>(null);
   const isCapturing = useRef(false);
   const frameCounter = useSharedValue(0);
+  const lastCropRef = useRef<CropMeta | null>(null);
 
   // --- 2. STATE ---
   const [status, setStatus] = useState<"loading" | "positioning" | "processing" | "success">("loading");
@@ -122,12 +132,15 @@ export default function AttendanceScannerScreen() {
   }, [hasPermission]);
 
   // --- 4. WORKLETS (The High Speed Part) ---
-  const syncFaceState = Worklets.createRunOnJS((isFound: boolean, vector: any) => {
-    if (faceDetected !== isFound) setFaceDetected(isFound);
-    const cleanVector = ensureArray(vector);
-    // console.log(cleanVector)
-    vectorRef.current = cleanVector.length > 0 ? new Float32Array(cleanVector) : null;
-  });
+  const syncFaceState = Worklets.createRunOnJS(
+    (isFound: boolean, vector: any, cropMeta?: CropMeta | null) => {
+      if (faceDetected !== isFound) setFaceDetected(isFound);
+      const cleanVector = ensureArray(vector);
+      // console.log(cleanVector)
+      vectorRef.current = cleanVector.length > 0 ? new Float32Array(cleanVector) : null;
+      lastCropRef.current = cleanVector.length > 0 ? (cropMeta ?? null) : null;
+    },
+  );
 
   const frameProcessor = useFrameProcessor((frame) => {
     "worklet";
@@ -158,15 +171,22 @@ export default function AttendanceScannerScreen() {
 
         const output = model.runSync([resized]);
         if (output && output.length > 0) {
-          syncFaceState(true, output[0] as Float32Array);
+          syncFaceState(true, output[0] as Float32Array, {
+            x,
+            y,
+            width,
+            height,
+            frameWidth: frame.width,
+            frameHeight: frame.height,
+          });
         } else {
-          syncFaceState(true, null);
+          syncFaceState(true, null, null);
         }
       } catch (e) {
-        syncFaceState(true, null);
+        syncFaceState(true, null, null);
       }
     } else {
-      syncFaceState(false, null);
+      syncFaceState(false, null, null);
     }
   }, [model, detectFaces]);
 
@@ -184,6 +204,18 @@ export default function AttendanceScannerScreen() {
       // Normalize the live embedding to match stored normalized embeddings
       const normalizedEmbedding = normalizeEmbedding(rawEmbedding);
       // console.log(normalizedEmbedding)
+
+      if (lastCropRef.current) {
+        const { x, y, width, height, frameWidth, frameHeight } = lastCropRef.current;
+        const areaRatio = (width * height) / (frameWidth * frameHeight);
+        console.log(
+          `[AttendanceScan] Crop bounds: x=${x.toFixed(1)} y=${y.toFixed(1)} ` +
+          `w=${width.toFixed(1)} h=${height.toFixed(1)} frame=${frameWidth}x${frameHeight} ` +
+          `area=${(areaRatio * 100).toFixed(1)}%`,
+        );
+      } else {
+        console.log("[AttendanceScan] Crop bounds: unavailable");
+      }
 
       // Compare against all stored embeddings using the helper function
       const match = findBestMatch(normalizedEmbedding, storedEmbeddings);

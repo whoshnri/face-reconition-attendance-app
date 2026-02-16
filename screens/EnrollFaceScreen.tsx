@@ -22,11 +22,25 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useApp } from "@/store/AppContext";
-import { saveFaceEmbedding } from "@/lib/database";
-import { normalizeEmbedding, ensureArray } from "@/lib/faceRecognition";
+import { saveFaceEmbedding, getAllFaceEmbeddings } from "@/lib/database";
+import {
+  normalizeEmbedding,
+  ensureArray,
+  findBestMatch,
+  SIMILARITY_THRESHOLD,
+} from "@/lib/faceRecognition";
 import { useTheme } from "@/hooks/useTheme";
 import { AnimatedPressable } from "@/components/AnimatedPressable";
 
+
+type CropMeta = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  frameWidth: number;
+  frameHeight: number;
+};
 
 export default function EnrollFaceScreen() {
   const navigation = useNavigation<any>();
@@ -52,6 +66,7 @@ export default function EnrollFaceScreen() {
   const vectorRef = useRef<Float32Array | null>(null);
   const isCapturing = useRef(false);
   const frameCounter = useSharedValue(0);
+  const lastCropRef = useRef<CropMeta | null>(null);
 
   // --- 2. STATE ---
   const [status, setStatus] = useState<"loading" | "positioning" | "processing" | "success">("loading");
@@ -81,7 +96,8 @@ export default function EnrollFaceScreen() {
   }, [hasPermission]);
 
   // --- 4. WORKLETS (The High Speed Part) ---
-  const syncFaceState = Worklets.createRunOnJS((isFound: boolean, vector: any) => {
+  const syncFaceState = Worklets.createRunOnJS(
+    (isFound: boolean, vector: any, cropMeta?: CropMeta | null) => {
     if (faceDetected !== isFound) setFaceDetected(isFound);
 
     // Robustly convert potentially serialized object to array
@@ -89,9 +105,11 @@ export default function EnrollFaceScreen() {
 
     if (cleanVector.length > 0) {
       vectorRef.current = new Float32Array(cleanVector);
+      lastCropRef.current = cropMeta ?? null;
       console.log(`[FaceEnroll] Face detected, embedding size: ${cleanVector.length}`);
     } else {
       vectorRef.current = null;
+      lastCropRef.current = null;
     }
   });
 
@@ -124,15 +142,22 @@ export default function EnrollFaceScreen() {
 
         const output = model.runSync([resized]);
         if (output && output.length > 0) {
-          syncFaceState(true, output[0] as Float32Array);
+          syncFaceState(true, output[0] as Float32Array, {
+            x,
+            y,
+            width,
+            height,
+            frameWidth: frame.width,
+            frameHeight: frame.height,
+          });
         } else {
-          syncFaceState(true, null);
+          syncFaceState(true, null, null);
         }
       } catch (e) {
-        syncFaceState(true, null);
+        syncFaceState(true, null, null);
       }
     } else {
-      syncFaceState(false, null);
+      syncFaceState(false, null, null);
     }
   }, [model, detectFaces]);
 
@@ -151,6 +176,34 @@ export default function EnrollFaceScreen() {
 
       // Normalize the embedding before storage for accurate comparison
       const normalizedEmbedding = normalizeEmbedding(rawEmbedding);
+
+      if (lastCropRef.current) {
+        const { x, y, width, height, frameWidth, frameHeight } = lastCropRef.current;
+        const areaRatio = (width * height) / (frameWidth * frameHeight);
+        console.log(
+          `[FaceEnroll] Crop bounds: x=${x.toFixed(1)} y=${y.toFixed(1)} ` +
+          `w=${width.toFixed(1)} h=${height.toFixed(1)} frame=${frameWidth}x${frameHeight} ` +
+          `area=${(areaRatio * 100).toFixed(1)}%`,
+        );
+      } else {
+        console.log("[FaceEnroll] Crop bounds: unavailable");
+      }
+
+      const existingEmbeddings = await getAllFaceEmbeddings();
+      const otherEmbeddings = existingEmbeddings
+        .filter((entry) => entry.studentId !== student.id)
+        .map((entry) => ({ studentId: entry.studentId, embedding: entry.embedding }));
+
+      const overlapMatch = findBestMatch(normalizedEmbedding, otherEmbeddings);
+      if (overlapMatch && overlapMatch.similarity >= SIMILARITY_THRESHOLD) {
+        console.warn(
+          `[FaceEnroll] Enrollment blocked: embedding too close to ${overlapMatch.studentId} (similarity: ${overlapMatch.similarity.toFixed(3)})`,
+        );
+        setStatus("positioning");
+        isCapturing.current = false;
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
 
       await saveFaceEmbedding(student.id, normalizedEmbedding);
       await enrollFace(student.id);
