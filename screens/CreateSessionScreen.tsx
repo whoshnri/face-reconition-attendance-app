@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Platform, Pressable } from "react-native";
+import { View, StyleSheet, Platform, Pressable, TextInput } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
@@ -21,6 +21,8 @@ export default function CreateSessionScreen() {
   const { theme } = useTheme();
   const { students, startSession } = useApp();
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [subjectName, setSubjectName] = useState("");
+  const [courseCode, setCourseCode] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -49,13 +51,17 @@ export default function CreateSessionScreen() {
   };
 
   const handleCreateSession = async () => {
-    if (enrolledCount === 0) {
+    if (enrolledCount === 0 || !subjectName.trim()) {
       return;
     }
 
     setIsCreating(true);
     try {
-      const sessionId = await startSession(selectedDate);
+      const sessionId = await startSession(
+        subjectName.trim(),
+        courseCode.trim() || undefined,
+        selectedDate
+      );
       // Navigate to scanner and remove CreateSession from stack
       navigation.reset({
         index: 1,
@@ -88,6 +94,42 @@ export default function CreateSessionScreen() {
         </View>
 
         <View style={styles.form}>
+          <View style={styles.section}>
+            <ThemedText style={styles.label}>Subject Name</ThemedText>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
+              placeholder="e.g. Mathematics, History..."
+              placeholderTextColor={theme.textDisabled}
+              value={subjectName}
+              onChangeText={setSubjectName}
+            />
+          </View>
+
+          <View style={styles.section}>
+            <ThemedText style={styles.label}>Course Code (Optional)</ThemedText>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
+              placeholder="e.g. CS101, ENG202..."
+              placeholderTextColor={theme.textDisabled}
+              value={courseCode}
+              onChangeText={setCourseCode}
+            />
+          </View>
+
           <View style={styles.section}>
             <ThemedText style={styles.label}>Session Date</ThemedText>
             <Pressable
@@ -144,12 +186,12 @@ export default function CreateSessionScreen() {
         <View style={styles.footer}>
           <AnimatedPressable
             onPress={handleCreateSession}
-            disabled={enrolledCount === 0 || isCreating}
+            disabled={enrolledCount === 0 || isCreating || !subjectName.trim()}
             style={[
               styles.createButton,
               {
                 backgroundColor:
-                  enrolledCount === 0 || isCreating
+                  enrolledCount === 0 || isCreating || !subjectName.trim()
                     ? theme.textDisabled
                     : theme.primary,
                 marginBottom: Spacing.lg,
@@ -332,6 +374,12 @@ const styles = StyleSheet.create({
   },
   datePicker: {
     height: 200,
+  },
+  input: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    fontSize: 16,
   },
 });
 

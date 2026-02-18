@@ -77,11 +77,14 @@ function SessionCard({
     >
       <View style={styles.sessionHeader}>
         <View>
-          <ThemedText type="h4">{session.date}</ThemedText>
+          <ThemedText type="h4">
+            {session.courseCode ? `[${session.courseCode}] ` : ""}
+            {session.subject || "Unnamed Session"}
+          </ThemedText>
           <ThemedText
             style={[styles.sessionTime, { color: theme.textSecondary }]}
           >
-            {session.time}
+            {session.date} • {session.time}
           </ThemedText>
         </View>
         <Feather name="chevron-right" size={20} color={theme.textDisabled} />
@@ -155,12 +158,12 @@ export default function ReportsScreen() {
   const averageAttendance =
     sessions.length > 0
       ? Math.round(
-          sessions.reduce((acc, s) => {
-            const rate =
-              s.totalCount > 0 ? (s.presentCount / s.totalCount) * 100 : 0;
-            return acc + rate;
-          }, 0) / sessions.length,
-        )
+        sessions.reduce((acc, s) => {
+          const rate =
+            s.totalCount > 0 ? (s.presentCount / s.totalCount) * 100 : 0;
+          return acc + rate;
+        }, 0) / sessions.length,
+      )
       : 0;
 
   const handleSessionPress = (session: AttendanceSession) => {
@@ -171,82 +174,82 @@ export default function ReportsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ThemedView style={styles.innerContainer}>
         <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
-        <View style={styles.filterRow}>
-          <FilterButton
-            label="This Week"
-            isActive={filter === "week"}
-            onPress={() => setFilter("week")}
-          />
-          <FilterButton
-            label="This Month"
-            isActive={filter === "month"}
-            onPress={() => setFilter("month")}
-          />
-          <FilterButton
-            label="All Time"
-            isActive={filter === "all"}
-            onPress={() => setFilter("all")}
-          />
-        </View>
-
-        <View style={styles.summaryRow}>
-          <View
-            style={[
-              styles.summaryCard,
-              {
-                backgroundColor: theme.backgroundDefault,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <ThemedText type="h2" style={{ color: theme.primary }}>
-              {totalSessions}
-            </ThemedText>
-            <ThemedText
-              style={[styles.summaryLabel, { color: theme.textSecondary }]}
-            >
-              Total Sessions
-            </ThemedText>
+          <View style={styles.filterRow}>
+            <FilterButton
+              label="This Week"
+              isActive={filter === "week"}
+              onPress={() => setFilter("week")}
+            />
+            <FilterButton
+              label="This Month"
+              isActive={filter === "month"}
+              onPress={() => setFilter("month")}
+            />
+            <FilterButton
+              label="All Time"
+              isActive={filter === "all"}
+              onPress={() => setFilter("all")}
+            />
           </View>
-          <View
-            style={[
-              styles.summaryCard,
-              {
-                backgroundColor: theme.backgroundDefault,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <ThemedText type="h2" style={{ color: Colors.light.success }}>
-              {averageAttendance}%
-            </ThemedText>
-            <ThemedText
-              style={[styles.summaryLabel, { color: theme.textSecondary }]}
-            >
-              Avg. Attendance
-            </ThemedText>
-          </View>
-        </View>
 
-        {sessions.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <FlatList
-            data={sessions}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <SessionCard
-                session={item}
-                onPress={() => handleSessionPress(item)}
-              />
-            )}
-            contentContainerStyle={[
-              styles.listContent,
-              { paddingBottom: tabBarHeight + Spacing.xl },
-            ]}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
+          <View style={styles.summaryRow}>
+            <View
+              style={[
+                styles.summaryCard,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <ThemedText type="h2" style={{ color: theme.primary }}>
+                {totalSessions}
+              </ThemedText>
+              <ThemedText
+                style={[styles.summaryLabel, { color: theme.textSecondary }]}
+              >
+                Total Sessions
+              </ThemedText>
+            </View>
+            <View
+              style={[
+                styles.summaryCard,
+                {
+                  backgroundColor: theme.backgroundDefault,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <ThemedText type="h2" style={{ color: Colors.light.success }}>
+                {averageAttendance}%
+              </ThemedText>
+              <ThemedText
+                style={[styles.summaryLabel, { color: theme.textSecondary }]}
+              >
+                Avg. Attendance
+              </ThemedText>
+            </View>
+          </View>
+
+          {sessions.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <FlatList
+              data={sessions}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <SessionCard
+                  session={item}
+                  onPress={() => handleSessionPress(item)}
+                />
+              )}
+              contentContainerStyle={[
+                styles.listContent,
+                { paddingBottom: tabBarHeight + Spacing.xl },
+              ]}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
         </View>
       </ThemedView>
     </SafeAreaView>

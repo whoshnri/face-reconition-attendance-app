@@ -24,9 +24,7 @@
 
 import { loadTensorflowModel, TensorflowModel } from "react-native-fast-tflite";
 
-// ============================================================================
-// CONFIGURATION - You can tweak these values
-// ============================================================================
+
 
 /**
  * This is our AI model file
@@ -36,7 +34,7 @@ const MODEL_PATH = require("../assets/models/mobilefacenet.tflite");
 
 export const EMBEDDING_SIZE = 128;
 
-export const SIMILARITY_THRESHOLD = 0.7;
+export const SIMILARITY_THRESHOLD = 0.75;
 const MIN_SIMILARITY_GAP = 0.08;
 
 // ============================================================================

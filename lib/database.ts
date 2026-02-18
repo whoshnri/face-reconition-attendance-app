@@ -20,6 +20,8 @@ export type AttendanceSession = {
   id: string;
   date: string;
   time: string;
+  subject?: string;
+  courseCode?: string;
   presentCount: number;
   totalCount: number;
   attendees: AttendanceRecord[];
@@ -52,6 +54,8 @@ async function initializeTables() {
       id TEXT PRIMARY KEY NOT NULL,
       date TEXT NOT NULL,
       time TEXT NOT NULL,
+      subject TEXT,
+      courseCode TEXT,
       presentCount INTEGER DEFAULT 0,
       totalCount INTEGER DEFAULT 0
     );
@@ -74,6 +78,14 @@ async function initializeTables() {
       FOREIGN KEY (studentId) REFERENCES students(id) ON DELETE CASCADE
     );
   `);
+
+  // Migrate sessions table if columns are missing
+  try {
+    await db.execAsync("ALTER TABLE sessions ADD COLUMN subject TEXT;");
+  } catch (e) { }
+  try {
+    await db.execAsync("ALTER TABLE sessions ADD COLUMN courseCode TEXT;");
+  } catch (e) { }
 }
 
 // Face Embedding CRUD
@@ -238,6 +250,8 @@ export async function getAllSessions(): Promise<AttendanceSession[]> {
     id: string;
     date: string;
     time: string;
+    subject?: string;
+    courseCode?: string;
     presentCount: number;
     totalCount: number;
   }>("SELECT * FROM sessions ORDER BY date DESC, time DESC");
@@ -258,13 +272,17 @@ export async function addSession(
   date: string,
   time: string,
   totalCount: number,
+  subject?: string,
+  courseCode?: string,
 ): Promise<void> {
   const database = await openDatabase();
   await database.runAsync(
-    "INSERT INTO sessions (id, date, time, presentCount, totalCount) VALUES (?, ?, ?, 0, ?)",
+    "INSERT INTO sessions (id, date, time, subject, courseCode, presentCount, totalCount) VALUES (?, ?, ?, ?, ?, 0, ?)",
     id,
     date,
     time,
+    subject || null,
+    courseCode || null,
     totalCount,
   );
 }

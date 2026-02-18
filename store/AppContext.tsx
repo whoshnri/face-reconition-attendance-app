@@ -22,7 +22,11 @@ type AppContextType = {
   updateStudent: (id: string, name: string, studentId: string) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
   enrollFace: (id: string) => Promise<void>;
-  startSession: (sessionDate?: Date) => Promise<string>;
+  startSession: (
+    subject: string,
+    courseCode?: string,
+    sessionDate?: Date
+  ) => Promise<string>;
   markAttendance: (studentId: string) => Promise<boolean>;
   endSession: () => void;
   getStudentById: (id: string) => db.Student | undefined;
@@ -124,16 +128,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const startSession = async (sessionDate?: Date): Promise<string> => {
+  const startSession = async (
+    subject: string,
+    courseCode?: string,
+    sessionDate?: Date,
+  ): Promise<string> => {
     const now = sessionDate || new Date();
     const sessionId = generateId();
     const date = formatDate(now);
     const time = formatTime(now);
-    await db.addSession(sessionId, date, time, students.length);
+    await db.addSession(
+      sessionId,
+      date,
+      time,
+      students.length,
+      subject,
+      courseCode,
+    );
     const newSession: db.AttendanceSession = {
       id: sessionId,
       date,
       time,
+      subject,
+      courseCode,
       presentCount: 0,
       totalCount: students.length,
       attendees: [],

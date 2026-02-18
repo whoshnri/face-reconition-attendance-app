@@ -224,6 +224,10 @@ export default function SessionDetailScreen() {
         <View
           className={`p-4 rounded-xl border border-border bg-background-default mb-6 mt-12`}
         >
+          <ThemedText type="h3" className="mb-2">
+            {session.courseCode ? `[${session.courseCode}] ` : ""}
+            {session.subject || "Unnamed Session"}
+          </ThemedText>
           <View className="flex-row gap-6 mb-4">
             <View className="flex-row items-center gap-2">
               <Feather name="calendar" size={18} color={theme.primary} />

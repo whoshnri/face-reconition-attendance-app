@@ -152,16 +152,27 @@ export default function AttendanceHomeScreen() {
               >
                 <View style={styles.sessionHeader}>
                   <View>
-                    <ThemedText type="h4" style={{ fontSize: 16 }}>{session.date}</ThemedText>
-                    <ThemedText style={[styles.sessionTime, { color: theme.textSecondary }]}>
-                      {session.time}
+                    <ThemedText type="h4" style={{ fontSize: 16 }}>
+                      {session.courseCode ? `[${session.courseCode}] ` : ""}
+                      {session.subject || "Unnamed Session"}
+                    </ThemedText>
+                    <ThemedText
+                      style={[styles.sessionTime, { color: theme.textSecondary }]}
+                    >
+                      {session.date} • {session.time}
                     </ThemedText>
                   </View>
                   <View style={styles.sessionRight}>
-                    <ThemedText style={[styles.sessionCount, { color: theme.primary }]}>
+                    <ThemedText
+                      style={[styles.sessionCount, { color: theme.primary }]}
+                    >
                       {session.presentCount}/{session.totalCount}
                     </ThemedText>
-                    <Feather name="chevron-right" size={20} color={theme.textDisabled} />
+                    <Feather
+                      name="chevron-right"
+                      size={20}
+                      color={theme.textDisabled}
+                    />
                   </View>
                 </View>
               </AnimatedPressable>
